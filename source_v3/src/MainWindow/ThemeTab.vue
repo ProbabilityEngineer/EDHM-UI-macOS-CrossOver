@@ -1,6 +1,6 @@
 <template>
 
-  <div class="theme-tab"> <!-- theme-container -->
+  <div class="theme-tab" ref="themeTab" tabindex="0" @keydown="onThemeListKeyDown"> <!-- theme-container -->
 
     <!-- Loading Spinner -->
     <div v-if="loading" class="spinner-container">
@@ -12,7 +12,7 @@
     <!-- List of Themes -->
     <ul v-else>
       <li v-for="image in images" :key="image.id" :id="'image-' + image.id" class="image-container"
-        :class="{ 'selected': image.id === selectedImageId }" @click="OnSelectTheme(image)"
+        :class="{ 'selected': image.id === selectedImageId }" @click="focusThemeList(); OnSelectTheme(image)"
         @contextmenu="onRightClick($event, image)">
         <img :src="image.src" :alt="image.alt" class="img-thumbnail" aria-label="Image of {{ image.name }}" />
         <span class="image-label">{{ image.name }}</span>
@@ -192,6 +192,7 @@ export default {
         if (initialTheme) {
           this.OnSelectTheme({ id: initialTheme.id });
         }
+        this.focusThemeList();
 
       } catch (error) {
         console.error('Failed to load files:', error);
@@ -241,6 +242,41 @@ export default {
     findThemeByName(themeName) {
       if (!themeName) return null;
       return this.themes.find(item => item.id !== 0 && item.file?.credits?.theme === themeName) || null;
+    },
+    focusThemeList() {
+      this.$nextTick(() => this.$refs.themeTab?.focus());
+    },
+    onThemeListKeyDown(event) {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (!this.images || this.images.length === 0) return;
+
+      const currentIndex = Math.max(0, this.images.findIndex(image => image.id === this.selectedImageId));
+      let nextIndex = currentIndex;
+
+      switch (event.key) {
+        case 'ArrowUp':
+          nextIndex = Math.max(0, currentIndex - 1);
+          break;
+        case 'ArrowDown':
+          nextIndex = Math.min(this.images.length - 1, currentIndex + 1);
+          break;
+        case 'Home':
+          nextIndex = 0;
+          break;
+        case 'End':
+          nextIndex = this.images.length - 1;
+          break;
+        case 'Enter':
+          EventBus.emit('OnApplyTheme', null);
+          event.preventDefault();
+          return;
+        default:
+          return;
+      }
+
+      event.preventDefault();
+      this.OnSelectTheme(this.images[nextIndex]);
     },
 
     /** When Fired, Selects and Loads a given Theme   * 
@@ -463,6 +499,7 @@ export default {
     */
     onRightClick(event, image) {
       event.preventDefault(); // Prevent the default context menu
+      this.focusThemeList();
       this.OnSelectTheme(image);
       this.showContextMenu(event.clientX, event.clientY); // Show the custom context menu
     },
