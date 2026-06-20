@@ -151,7 +151,8 @@ export default {
         //- Initialize the Components:
         EventBus.emit('OnInitializeThemes', JSON.parse(JSON.stringify(this.settings))); //<- Event Listened at ThemeTab.vue
         EventBus.emit('InitializeNavBars',  JSON.parse(JSON.stringify(this.settings))); //<- Event Listened at NavBars.vue        
-        EventBus.emit('InitializeHUDimage', null);    //<- Event Listened at HudImage.vue
+        // ThemeTab selects the applied/remembered theme after loading and then emits ShowThemePreview.
+        // Do not show the default HUD first; it causes a jarring flash during theme list loading.
         EventBus.emit('DoLoadGlobalSettings', null);  //<- Event Listened at GlobalSettingsTab.vue
         EventBus.emit('DoLoadUserSettings', null);    //<- Event Listened at UserSettingsTab.vue
         EventBus.emit('ShipyardUI-Initialize', null); //<- Event Listened at ShipyardUI.vue
@@ -264,7 +265,7 @@ export default {
 
         EventBus.emit('InitializeNavBars', JSON.parse(JSON.stringify(this.settings))); //<- Event Listened at NavBars.vue
         EventBus.emit('OnInitializeThemes', JSON.parse(JSON.stringify(this.settings)));//<- Event Listened at ThemeTab.vue
-        EventBus.emit('InitializeHUDimage', null);    //<- Event Listened at HudImage.vue
+        // ThemeTab will emit ShowThemePreview after selecting the applied/remembered theme.
         EventBus.emit('DoLoadGlobalSettings', null);  //<- Event Listened at GlobalSettingsTab.vue
         EventBus.emit('DoLoadUserSettings', null);    //<- Event Listened at UserSettingsTab.vue
 

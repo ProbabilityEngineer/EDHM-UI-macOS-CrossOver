@@ -227,3 +227,7 @@ User hit 3PMod install failure for ED-GT GraphicTweaks on mac/CrossOver: TPMods 
 **2026-06-20T15:29:42Z**
 
 Fixed mac/CrossOver 3PMod install extraction: TPMods now call a new installTPModArchive IPC instead of decompressing directly into the game path. On darwin, the helper extracts zip to temp then copies EDHM-ini/ShaderFixes contents into their symlink targets, avoiding ditto 'EDHM-ini: Not a directory' errors. Rebuilt successfully.
+
+**2026-06-20T15:43:40Z**
+
+Reduced startup preview flash: App no longer emits InitializeHUDimage immediately on startup/game-instance reload, and HudImage no longer seeds the default HUD image on mount. The preview area now shows a neutral 'Loading theme preview…' placeholder until ThemeTab finishes loading and emits the applied/remembered theme preview. Rebuilt successfully.
