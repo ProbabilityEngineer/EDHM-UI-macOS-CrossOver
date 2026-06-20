@@ -231,3 +231,7 @@ Fixed mac/CrossOver 3PMod install extraction: TPMods now call a new installTPMod
 **2026-06-20T15:43:40Z**
 
 Reduced startup preview flash: App no longer emits InitializeHUDimage immediately on startup/game-instance reload, and HudImage no longer seeds the default HUD image on mount. The preview area now shows a neutral 'Loading theme preview…' placeholder until ThemeTab finishes loading and emits the applied/remembered theme preview. Rebuilt successfully.
+
+**2026-06-20T15:51:02Z**
+
+Suppressed misleading startup update prompt on macOS: AnalyseUpdate now checks platform before showing the download dialog and returns silently for non-Windows/Linux when upstream has an update but no supported updater artifact. Rebuilt successfully.

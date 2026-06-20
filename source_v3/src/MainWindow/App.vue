@@ -767,8 +767,17 @@ export default {
         const localVersion = await window.api.getAppVersion();
         const serverVersion = latesRelease.version;
         const isUpdate = Util.compareVersions(serverVersion, localVersion); console.log('isUpdate:', isUpdate);
+        const platform = await window.api.getPlatform();
 
         //console.log(latesRelease);
+
+        if (isUpdate && platform !== 'win32' && platform !== 'linux') {
+          // Upstream releases currently publish Windows/Linux installers only.
+          // On macOS/CrossOver PoC builds, showing the normal update prompt every
+          // launch is misleading because there is no downloadable mac artifact.
+          console.log(`Update ${serverVersion} is available, but automatic updates are not supported on ${platform}.`);
+          return;
+        }
 
         if (isUpdate) {
           //Separate the Changelogs from the Install instructions:
@@ -785,7 +794,6 @@ export default {
             cancelId: 0
           };
           let fileSavePath = await window.api.resolveEnvVariables('%LOCALAPPDATA%\\Temp\\EDHM_UI\\edhm-ui-v3-windows-x64.exe');
-          const platform = await window.api.getPlatform();
           var download_url = '';  
 
           window.api.ShowMessageBox(options).then(async result => {
