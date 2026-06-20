@@ -125,16 +125,12 @@ export default {
           if (!Util.isNotNullOrEmpty(ActiveInstance.path)) {
             VirginPlayer = false; //<- We are not a New Player, we have an Active Instance
             // Either the Active Instance or its path is not set:
-            EventBus.emit('RoastMe', { type: 'Success', message: 'Welcome to the application!<br>You now need to tell EDHM where is your game located.', delay: 10000 });
-            EventBus.emit('RoastMe', { type: 'Info', message: '- Leave the Game running at the menus<br>- Click the `Green button`, read and do as it says<br>- the game will auto-close, the paths will set, save the settings.<br>- go check the game, should be pretty green.', autoHide: false, width:'460px' });
             EventBus.emit('open-settings-editor', this.InstallStatus); //<- Open the Settings Window
             return;
           }
         } else {
           // Welcome New User!  
           VirginPlayer = true; //<- We are a New Player
-          EventBus.emit('RoastMe', { type: 'Success', message: 'Welcome to the application!<br>You now need to tell EDHM where is your game located.', delay: 10000 });
-          EventBus.emit('RoastMe', { type: 'Info', message: '- Leave the Game running at the menus<br>- Click the `Green button`, read and do as it says<br>- the game will auto-close, the paths will set, save the settings.<br>- go check the game, should be pretty green.', autoHide: false, width:'460px' });
           EventBus.emit('open-settings-editor', this.InstallStatus); //<- Open the Settings Window
           return;
         }
@@ -208,7 +204,7 @@ export default {
 
         const jsonString = JSON.stringify(newConfig, null, 4);
         this.settings = await window.api.saveSettings(jsonString);
-        this.OnGameInstance_Changed({ GameInstanceName: newConfig.ActiveInstance, InstallMod:true }); //<- Update the Game Instance
+        this.OnGameInstance_Changed({ GameInstanceName: newConfig.ActiveInstance, InstallMod:false }); //<- Update active instance without installing mod files
 
       } catch (error) {
         EventBus.emit('ShowError', error);
@@ -231,6 +227,18 @@ export default {
 
         const NewInstance = await window.api.getInstanceByName(e.GameInstanceName);
         console.log('NewInstance:', NewInstance);
+
+        if (!NewInstance?.path) {
+          this.settings.ActiveInstance = e.GameInstanceName;
+          const jsonString = JSON.stringify(this.settings, null, 4);
+          await window.api.saveSettings(jsonString);
+          EventBus.emit('InitializeNavBars', JSON.parse(JSON.stringify(this.settings)));
+          EventBus.emit('RoastMe', {
+            type: 'Warning',
+            message: `No game folder is configured yet for '${e.GameInstanceName}'. Open Settings and set its game path before installing or switching EDHM to it.`
+          });
+          return;
+        }
 
         if (e.InstallMod) {
           EventBus.emit('RoastMe', { type: 'Info', message: `Installing EDHM on '${e.GameInstanceName}'..` });
@@ -303,7 +311,7 @@ export default {
       try {
         this.themeTemplate = JSON.parse(JSON.stringify(event));
         console.log('Theme Applied: ', this.themeTemplate.credits.theme);        
-        //EventBus.emit('InitializeProperties', JSON.parse(JSON.stringify(this.themeTemplate))); //<- Event Listened at PropertiesTabEx.vue
+        EventBus.emit('InitializeProperties', JSON.parse(JSON.stringify(this.themeTemplate))); //<- Event Listened at PropertiesTabEx.vue
       } catch (error) {
         EventBus.emit('ShowError', error);
       }

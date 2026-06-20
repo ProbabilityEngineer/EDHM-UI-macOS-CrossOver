@@ -16,15 +16,13 @@
         @contextmenu="onRightClick($event, image)">
         <img :src="image.src" :alt="image.alt" class="img-thumbnail" aria-label="Image of {{ image.name }}" />
         <span class="image-label">{{ image.name }}</span>
-        <div v-if="isFavoriteEx(image)" class="badge-triangle"></div>
+        <div v-if="isFavoriteEx(image)" class="favorite-badge">★ Favorite</div>
       </li>
     </ul>
 
     <!-- Context Menu for Themes -->
     <ul v-if="showContextMenuFlag" :style="contextMenuStyle" class="dropdown-menu border border-primary shadow show" ref="contextMenu">
       <li><a class="dropdown-item" href="#" @click="onContextMenu_Click('ApplyTheme')">Apply Theme</a></li>
-      <li><a class="dropdown-item" href="#" :class="{ 'disabled': !isPreviewAvailable }"
-          @click="isPreviewAvailable ? onContextMenu_Click('ThemePreview') : null">Theme Preview</a></li>
       <li><a class="dropdown-item" href="#" @click="onContextMenu_Click('OpenFolder')">Open Theme Folder</a></li>
       <li><a class="dropdown-item" href="#" @click="onContextMenu_Click('DeleteTheme')">Delete Theme</a></li>
       <li><hr class="dropdown-divider"></li>
@@ -79,10 +77,6 @@ export default {
     };
   },
   computed: {
-    /** Check if the selected theme has a preview available */
-    isPreviewAvailable() {
-      return this.selectedTheme && this.selectedTheme.preview;
-    },
     isFavorite() {
       return this.selectedTheme && this.selectedTheme.file && this.selectedTheme.file.isFavorite;
     },
@@ -168,8 +162,36 @@ export default {
           }))
         );      
 
+        const currentSettingsPath = await window.api.joinPath(GamePath, 'ThemeSettings.json');
+        const currentSettingsExists = await window.api.fileExists(currentSettingsPath);
+        let appliedThemeName = null;
+        if (currentSettingsExists) {
+          try {
+            const currentSettings = await window.api.getJsonFile(currentSettingsPath);
+            appliedThemeName = currentSettings?.credits?.theme || currentSettings?.name || currentSettings?.theme || null;
+          } catch (error) {
+            console.warn('Could not read current ThemeSettings.json:', error);
+          }
+        }
+
+        const appliedTheme = appliedThemeName
+          ? this.themes.find(item => item.id !== 0 && item.file?.credits?.theme === appliedThemeName)
+          : null;
+        if (appliedTheme) {
+          this.themes[0].name = 'Current Settings: ' + appliedThemeName;
+          this.themes[0].src = appliedTheme.src;
+          this.themes[0].preview = appliedTheme.preview;
+          this.themes[0].file.credits = { ...this.themes[0].file.credits, ...appliedTheme.file.credits };
+        }
+
         this.FilterThemes(this.programSettings.FavToogle);
         EventBus.emit('OnThemesLoaded', this.themes);  //<- this event will be heard in 'App.vue'
+
+        const rememberedThemeName = this.getRememberedThemeName();
+        const initialTheme = this.findThemeByName(rememberedThemeName) || appliedTheme || this.themes[0];
+        if (initialTheme) {
+          this.OnSelectTheme({ id: initialTheme.id });
+        }
 
       } catch (error) {
         console.error('Failed to load files:', error);
@@ -195,6 +217,32 @@ export default {
       //console.log('Filtering Favorites: ', this.images.length);
     },
 
+    selectedThemeStorageKey() {
+      const activeInstance = this.programSettings?.ActiveInstance || 'default';
+      return `EDHM_UI_V3.LastSelectedTheme.${activeInstance}`;
+    },
+    getRememberedThemeName() {
+      try {
+        return localStorage.getItem(this.selectedThemeStorageKey());
+      } catch (error) {
+        console.warn('Could not read remembered selected theme:', error);
+        return null;
+      }
+    },
+    rememberSelectedTheme(theme) {
+      try {
+        if (theme?.id && theme?.file?.credits?.theme) {
+          localStorage.setItem(this.selectedThemeStorageKey(), theme.file.credits.theme);
+        }
+      } catch (error) {
+        console.warn('Could not remember selected theme:', error);
+      }
+    },
+    findThemeByName(themeName) {
+      if (!themeName) return null;
+      return this.themes.find(item => item.id !== 0 && item.file?.credits?.theme === themeName) || null;
+    },
+
     /** When Fired, Selects and Loads a given Theme   * 
      * @param theme We only need the id (index in the list) -> { id: 0 }
      */
@@ -212,6 +260,7 @@ export default {
               if (selectedItem) {
                 this.selectedImageId = searchIndex;
                 this.selectedTheme = selectedItem;                                      //console.log('selectedTheme: ', this.selectedTheme);
+                this.rememberSelectedTheme(selectedItem);
 
                 this.$nextTick(() => {
                   const selectedElement = document.getElementById('image-' + selectedItem.id);
@@ -220,6 +269,15 @@ export default {
                   }
                 });
                 EventBus.emit('ThemeClicked', JSON.parse(JSON.stringify(selectedItem))); //<- this event will be heard in 'MainNavBars.vue'
+
+                if (selectedItem.preview || selectedItem.src) {
+                  EventBus.emit('ShowThemePreview', {
+                    src: selectedItem.preview || selectedItem.src,
+                    name: selectedItem.name
+                  });
+                } else {
+                  EventBus.emit('InitializeHUDimage', null);
+                }
               }
             }
             else {
@@ -307,9 +365,25 @@ export default {
      * @param theme data of the applied theme     */
     CurretSettingsUpdated(theme) {
       if (this.themes && this.themes.length > 0) {
-        //console.log(theme);
+        // Keep the synthetic Current Settings entry in sync with the newly applied theme.
         this.themes[0].name = 'Current Settings: ' + theme.credits.theme;
         this.themes[0].file.credits = theme.credits;
+
+        // Move the visible selection marker to the theme that was actually applied.
+        // Applying a theme does not re-click the list item, so without this the
+        // thumbnail highlight can remain on an older/stale selection.
+        const appliedTheme = this.themes.find(item =>
+          item.id !== 0 && item.file?.credits?.theme === theme.credits.theme
+        );
+        if (appliedTheme) {
+          this.themes[0].src = appliedTheme.src;
+          this.themes[0].preview = appliedTheme.preview;
+          this.selectedImageId = appliedTheme.id;
+          this.selectedTheme = appliedTheme;
+          this.rememberSelectedTheme(appliedTheme);
+        }
+
+        this.FilterThemes(this.favToogle);
       }
     },
 
@@ -330,13 +404,6 @@ export default {
           switch (action) {
             case 'ApplyTheme':
               EventBus.emit('OnApplyTheme', null); //<- this event will be heard in 'MainNavBars.vue'
-              break;
-
-            case 'ThemePreview':
-              //console.log(this.selectedTheme);
-              if (this.selectedTheme.preview) {
-                window.api.openUrlInBrowser(this.selectedTheme.preview);
-              }
               break;
 
             case 'OpenFolder':
@@ -522,6 +589,20 @@ ul {
   box-shadow: 0 0 10px #00bfff;
 }
 
+.selected::after {
+  content: 'Selected';
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  background-color: rgba(0, 191, 255, 0.85);
+  color: #001018;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  z-index: 2;
+}
+
 .image-label {
   position: absolute;
   bottom: 5px;
@@ -531,22 +612,17 @@ ul {
   border-radius: 3px;
 }
 
-.badge-triangle {
-  width: 0;
-  height: 0;
-  border-left: 40px solid transparent;
-  border-top: 40px solid #ffc107;
+.favorite-badge {
   position: absolute;
-  top: 0;
-  right: 0;
-}
-.badge-triangle::before {
-  content: '★';
-  position: absolute;
-  top: -50px;
-  right: 0px;
-  font-size: 26px;
-  color: #110ec7;
+  top: 5px;
+  right: 5px;
+  background-color: rgba(255, 193, 7, 0.9);
+  color: #151000;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  z-index: 2;
 }
 
 .spinner-container {

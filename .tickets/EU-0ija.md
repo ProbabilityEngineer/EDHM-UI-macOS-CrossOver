@@ -83,3 +83,123 @@ Extended AGENTS.md with an explicit fork/upstream sync workflow: keep main align
 **2026-06-20T07:50:37Z**
 
 Finalizing the latest workflow cleanup: committing the AGENTS upstream-sync guidance and matching ticket note updates onto macos-crossover-poc, then pushing the feature branch with an empty jj working copy on top.
+
+**2026-06-20T08:03:27Z**
+
+Diagnosed the lingering first-start blue/green boxes: they were still being emitted from source_v3/src/MainWindow/App.vue, not the settings editors. Removed the two startup RoastMe welcome/instruction toasts there while leaving the settings window auto-open and the localization wizard logic intact.
+
+**2026-06-20T08:14:32Z**
+
+User confirmed the first-start blue/green boxes are gone and settings still auto-open. Investigating the Game Localization Wizard next because clicking it appears to do nothing on macOS/CrossOver even with Elite already running at the menus.
+
+**2026-06-20T08:16:20Z**
+
+Confirmed the Game Localization Wizard is genuinely broken on macOS/CrossOver, not just silent. EliteDangerous64.exe is visible in the host process list, but FileHelper.detectProgram uses a Linux-style /proc lookup on non-Windows platforms and reads cwd instead of an executable path, so detection fails on mac. Implementing a mac-specific detection fix next.
+
+**2026-06-20T08:18:32Z**
+
+After the mac-specific process detection fix, the wizard still appears inert. Investigating the next likely CrossOver-specific failure: Windows-style executable paths are being passed back into renderer-side path.dirname on macOS, which would collapse to '.' instead of the game folder.
+
+**2026-06-20T08:18:54Z**
+
+Found a second mac/CrossOver wizard failure after process detection: preload.js used path.dirname() on a Windows-style executable path, which resolves to '.' on macOS. Updated getParentFolder() to detect Windows-style paths and use path.win32.dirname() so the wizard can derive the actual Elite folder from CrossOver process paths.
+
+**2026-06-20T08:34:34Z**
+
+User confirmed the wizard now detects/populates the game path on mac/CrossOver, but the current behavior of forcibly closing Elite is too abrupt. Updating the wizard UX to explain what the green button does, require Elite to be running first, and use modal confirmation/guidance before closing the game.
+
+**2026-06-20T08:35:29Z**
+
+Updated both settings-window wizard flows to use modal guidance instead of silent/background behavior. The green button now explains that Elite should already be running at the main menu, warns what the wizard is for, shows a clear 'not detected' modal if the game is not running, and asks whether to close Elite after detecting/populating the game folder instead of forcibly terminating it immediately.
+
+**2026-06-20T08:53:36Z**
+
+Renaming the user-facing label for SavesToRemember to the simpler wording the user requested: 'Number of Themes to Save'.
+
+**2026-06-20T09:12:11Z**
+
+Implemented initial CrossOver bottle-path support for non-standard bottle locations. Added CrossOverBottlePath to settings and both settings UIs, updated env/path resolution so %USERPROFILE%, %PROGRAMFILES%, and related Windows-style paths can resolve inside the configured bottle on mac, and made the wizard auto-infer the publisher from the detected game path when possible.
+
+**2026-06-20T09:18:03Z**
+
+User found two follow-up issues: the new wizard close/leave modal still results in Elite closing regardless of button choice, and Hide to Tray on close should be removed for mac because it does not apply. Also clarifying that CrossOver Bottle Root currently does not auto-populate; investigating whether to add detection or keep it manual for now.
+
+**2026-06-20T09:26:55Z**
+
+Wizard 'Leave Elite Running' now behaves correctly. Follow-up fix: CrossOverBottlePath inference likely suffers from Vue 2 reactivity because the property may not exist on already-loaded settings objects, so the textbox does not update even when inference runs. Initializing the property up front next.
+
+**2026-06-20T09:31:43Z**
+
+User reports two more follow-ups: the Clean Install button did not behave as expected and should be renamed to Reset, and CrossOver Bottle Root still did not auto-populate. Fixing the reset flow and making bottle-root inference run during settings initialization from an existing detected game path as well as during wizard/manual path updates.
+
+**2026-06-20T09:48:38Z**
+
+Applying two more mac-focused simplifications: remove the Themes & User's Data field from the settings UIs, and tighten CrossOver bottle-root inference so it derives directly from the host-side EliteDangerous64.exe path before the path is reduced to the game folder.
+
+**2026-06-20T09:50:57Z**
+
+Removed the Themes & User's Data control from both settings UIs so EDHM app data stays fixed to ~/Library/Application Support/EDHM-UI-V3. Also updated bottle-root inference to derive from the actual host executable path (translated from the detected Windows path first) instead of only from the reduced game folder, and made Reset clear the visible journal/config/bottle/game-path fields in the open form.
+
+**2026-06-20T09:55:56Z**
+
+Adjusted mac settings UX based on test feedback: Reset now clears PlayerJournal and PlayerConfigFolder to empty visible values instead of repopulating Windows defaults, MainWindow journal field now spans the full row from the left edge like the bottle-root field, and mac process detection now infers the CrossOver bottle root from the host-side /drive_c path embedded in the running process command line so detected exe paths can translate even before CrossOverBottlePath is configured.
+
+**2026-06-20T09:59:52Z**
+
+Follow-up on wizard regression: added a main-process bottle-path inference IPC that derives bottle user profile, journal folder, and graphics-config folder from a detected CrossOver bottle root. Both settings editors now call this during manual exe selection and wizard detection so the wizard can repopulate PlayerJournal/PlayerConfigFolder and CrossOverBottlePath from the detected game executable instead of relying on saved settings state.
+
+**2026-06-20T10:33:38Z**
+
+Reset auto-restart initially relaunched into a blank packaged window. Switched restart flow to a more graceful relaunch using app.relaunch({ execPath, args }) + app.quit(), tearing down tray/shortcuts and removing close listeners from all windows first. Also added main-window did-fail-load/render-process-gone logging to help capture any remaining packaged relaunch failures.
+
+**2026-06-20T10:35:33Z**
+
+Likely cause of blank post-reset relaunch is single-instance interference during self-restart on mac: the newly relaunched process may race the old one and get treated as a second instance, leaving the old process/window in a bad state. Updated restart flow to release the single-instance lock before relaunch, schedule relaunch on the next tick, and explicitly close all open windows before exiting.
+
+**2026-06-20T10:41:07Z**
+
+Self-relaunch is still broken via Electron's normal relaunch path on packaged mac builds, so reset now uses a mac-specific detached shell helper for packaged apps: it waits briefly, runs `open -n <App.app>`, and then the current process exits. Also renamed the Reset button to 'Reset & Relaunch' in both settings UIs.
+
+**2026-06-20T10:50:35Z**
+
+Polished main-window UX: main window now persists width/height across launches via app-data WindowState.json; NavBars footer now pre-hydrates its app/mod version text and game-instance dropdown directly from current settings instead of depending only on a later event; game dropdown now lists all configured instances instead of only those with non-empty paths; history options now use a plain array instead of a nested ref; and the Apply Theme button styling was normalized so it matches neighboring button height.
+
+**2026-06-20T11:14:43Z**
+
+Renamed settings label from 'CrossOver Bottle Root' to the shorter 'Bottle Root' in both settings UIs. User also reported bottle-root auto-detect still failing and asked whether pid-following could be used; likely next step is stronger pid/process-tree based inference rather than relying only on current command-line parsing.
+
+**2026-06-20T11:26:50Z**
+
+Improved graceful failure for unconfigured instances: 3PMods manager now detects missing game path or missing EDHM-ini/3rdPartyMods folder and shows a warning instead of throwing a red error dialog. Also strengthened mac process parsing for bottle detection by preferring a direct host-side executable path from the process command line before falling back to Windows-path translation.
+
+**2026-06-20T11:38:26Z**
+
+Bottle-root detection still failed; live ps/lsof inspection showed the Elite PID has a reliable cwd under the bottle drive_c path even though ps command lines expose only Windows C:\ paths. Added mac-specific lsof cwd fallback in detectProgram(): for each candidate PID, use lsof -a -p <pid> -d cwd and if it points inside /drive_c, return cwd/EliteDangerous64.exe. This should populate both game path and Bottle Root from the running Elite process without needing a preconfigured bottle root.
+
+**2026-06-20T11:44:24Z**
+
+Bottle root detection finally succeeded via lsof cwd. Verified screenshot paths: game path points inside bottle drive_c Products/elite-dangerous-odyssey-64 and Bottle Root points to the containing bottle. Updated settings inference so default %USERPROFILE% PlayerJournal/PlayerConfigFolder placeholders are overwritten with absolute host paths when a bottle root is inferred, improving mac clarity and avoiding reliance on later env expansion.
+
+**2026-06-20T11:58:23Z**
+
+Addressed latest test blockers: Save Changes no longer auto-installs EDHM files (prevents installEDHMmod during setup save); mac zip extraction now uses /usr/bin/ditto instead of zip-lib to avoid false path-traversal errors with game paths containing spaces; Reset now clears path fields and relaunches regardless of whether settings files already existed; bottom game dropdown now shows disabled 'No game configured' when no configured paths exist; window state now persists x/y as well as width/height; SettingsWindow removed Custom Icon/Start minimized UI and renamed Elite Config XML Folder to Graphics Config XML Folder.
+
+**2026-06-20T12:12:54Z**
+
+Addressed latest mac/CrossOver test feedback: added a dxmt GPU renderer option in the settings window, and changed mac EDHM mod install to extract the mod zip into a temp folder first, then copy root files to the game folder while copying EDHM-ini and ShaderFixes contents into the app-owned symlink targets. This avoids ditto extracting through existing symlinks in the game folder. Rebuilt successfully with Node 22 package command.
+
+**2026-06-20T13:07:01Z**
+
+CrossOver EDHM runtime confirmed working after user set d3d11 DLL override to native,builtin, then added d3dcompiler_47 native,builtin. Themes now apply in-game immediately on Apply Theme. Remaining UI issue: EDHM_UI does not visually update theme preview/selection correctly; selected indicator appears stuck on wrong theme and preview panel does not reflect selected/applied theme.
+
+**2026-06-20T13:16:08Z**
+
+Patched theme UI refresh after Apply Theme. App.vue now reinitializes PropertiesTabEx when OnThemeApplied fires, so the properties/preview side reflects applied theme data. ThemeTab.vue now updates the synthetic Current Settings entry, moves the visible selected thumbnail marker to the theme that was actually applied, refreshes filtered theme images, and adds an explicit Selected badge for clarity. Rebuilt successfully with Node 22 package command.
+
+**2026-06-20T13:32:02Z**
+
+Patched theme preview UX: selecting a theme now shows its preview image in the main left panel, and right-click Theme Preview displays the preview inside EDHM_UI instead of opening the file/URL externally in Apple Preview. Clarified/reworked the top-right theme badge: it is a Favorite marker, not selection; replaced ambiguous triangle/star icon with an explicit '★ Favorite' badge. Added source_v3/scripts/crossover-edhm-dll-overrides.py to automate setting CrossOver/Wine user.reg DLL overrides for d3d11 and d3dcompiler_47 to native,builtin with backup. Rebuilt successfully.
+
+**2026-06-20T14:22:43Z**
+
+Follow-up from testing: removed redundant Theme Preview context-menu item because single-click now previews inside EDHM_UI. ThemeTab now reads current EDHM-ini/ThemeSettings.json on load, labels Current Settings with the applied theme name, uses the applied theme thumbnail for Current Settings when matched, and auto-selects the last selected theme per active instance using localStorage, falling back to the applied theme. Applying a theme now updates the remembered selected theme too. Rebuilt successfully.

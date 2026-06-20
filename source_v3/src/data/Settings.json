@@ -93,6 +93,7 @@
     ],
     "PlayerJournal":"%USERPROFILE%\\Saved Games\\Frontier Developments\\Elite Dangerous",  
     "PlayerConfigFolder":"%USERPROFILE%\\AppData\\Local\\Frontier Developments\\Elite Dangerous\\Options\\Graphics",  
+    "CrossOverBottlePath":"",
     "UserDataFolder": "%EDHM_APPDATA%",    
     "LastFolderUsed":"",
 

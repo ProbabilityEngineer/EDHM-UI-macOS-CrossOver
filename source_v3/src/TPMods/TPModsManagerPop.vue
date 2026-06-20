@@ -275,6 +275,17 @@ export default {
 
                 const installedMods = await window.api.GetInstalledTPMods(this.ActiveInstance.path);    //console.log('Installed Mods:', installedMods);
 
+                if (installedMods?.setupNeeded) {
+                    this.TPmods = [];
+                    this.statusText = '3PMods not available yet';
+                    EventBus.emit('RoastMe', {
+                        type: 'Warning',
+                        title: '3PMods Not Ready',
+                        message: installedMods.message || 'Finish setting up this game instance first.'
+                    });
+                    return;
+                }
+
                 this.TPmods = [];
                 this.TPmods = await this.LoadTPMods(availableMods, installedMods); //console.log(this.TPmods);
                 this.statusText = this.ModsCounter + ' Detected Mods';
@@ -462,6 +473,15 @@ export default {
         async open(data) {
             this.visible = true;
             this.ActiveInstance = data;
+            if (!this.ActiveInstance?.path) {
+                this.statusText = '3PMods not available yet';
+                EventBus.emit('RoastMe', {
+                    type: 'Warning',
+                    title: '3PMods Not Ready',
+                    message: 'No game folder is configured for this game instance yet. Open Settings and configure the game path first.'
+                });
+                return;
+            }
             this.Initialize();
             console.log('Poping TPMods..');
         },

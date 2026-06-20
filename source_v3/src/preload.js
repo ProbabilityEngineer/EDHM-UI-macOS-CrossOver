@@ -3,14 +3,23 @@
 const { contextBridge, ipcRenderer, shell } = require('electron');
 const path = require('path');
 
+function getCrossPlatformParentFolder(filePath) {
+  if (!filePath) return filePath;
+
+  const looksLikeWindowsPath = /^[A-Za-z]:\\/.test(filePath) || filePath.includes('\\');
+  return looksLikeWindowsPath ? path.win32.dirname(filePath) : path.dirname(filePath);
+}
+
 contextBridge.exposeInMainWorld('api', {
 
   // #region Assets
 
   joinPath: (basePath, ...segments) => path.join(basePath, ...segments),
-  getParentFolder: (filePath) => path.dirname(filePath),
+  getParentFolder: (filePath) => getCrossPlatformParentFolder(filePath),
   getBaseName: (filePath, extension) => path.basename(filePath, extension),
   resolveEnvVariables: (inputPath) => ipcRenderer.invoke('resolve-env-variables', inputPath),
+  translateWindowsPath: (inputPath) => ipcRenderer.invoke('translate-windows-path', inputPath),
+  getBottlePaths: (bottleRoot) => ipcRenderer.invoke('get-bottle-paths', bottleRoot),
 
   getAssetPath: (assetPath) => ipcRenderer.invoke('get-asset-path', assetPath),
   getAssetFileUrl: (assetPath) => ipcRenderer.invoke('get-asset-file-url', assetPath),
@@ -196,6 +205,7 @@ contextBridge.exposeInMainWorld('api', {
 
   getPlatform: () => ipcRenderer.invoke('get-platform'),
   quitProgram: () => ipcRenderer.invoke('quit-program'),
+  restartProgram: () => ipcRenderer.invoke('restart-program'),
   runProgram: (filePath, args = []) => ipcRenderer.invoke('run-program', filePath, args),
 
 

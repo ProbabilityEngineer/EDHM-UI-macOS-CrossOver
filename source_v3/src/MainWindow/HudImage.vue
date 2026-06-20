@@ -250,6 +250,18 @@ export default {
         }
       }
     },
+
+    ShowThemePreview(preview) {
+      if (!preview?.src) return;
+
+      this.clickedArea = null;
+      this.currentArea = null;
+      this.areas = [];
+      this.scaledAreas = [];
+      this.imageSrc = preview.src;
+      this.$nextTick(() => this.setupCanvas());
+    },
+
   },
   async mounted() {
     try {
@@ -258,6 +270,7 @@ export default {
 
       EventBus.on('InitializeHUDimage', this.OnInitialize);
       EventBus.on('LoadArea', this.DoLoadArea);
+      EventBus.on('ShowThemePreview', this.ShowThemePreview);
     } catch (error) {
       console.log(error);
     }    
@@ -267,6 +280,7 @@ export default {
 
     EventBus.off('InitializeHUDimage', this.OnInitialize);
     EventBus.off('LoadArea', this.DoLoadArea);
+    EventBus.off('ShowThemePreview', this.ShowThemePreview);
   },
 };
 </script>

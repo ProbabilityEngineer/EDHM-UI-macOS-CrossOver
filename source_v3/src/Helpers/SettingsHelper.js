@@ -422,7 +422,7 @@ const getInstanceByName = (InstanceFullName) => {
     if (programSettings != null) {
       const gameInstance = programSettings.GameInstances
         .flatMap(instance => instance.games)
-        .find(game => game.instance === activeInstanceName);
+        .find(game => game.instance === activeInstanceName || game.name === activeInstanceName);
 
       if (!gameInstance) {
         throw new Error('404 - Instance Name Not Found');
@@ -452,8 +452,21 @@ function GetInstanceDataDirectory(instanceKey) {
  * @param {*} gamePath full path to the Game Instance */
 async function GetInstalledTPMods(gamePath) {
   try {
+    const results = { mods: [], errors: [], setupNeeded: false, message: '' };
+
+    if (!gamePath) {
+      results.setupNeeded = true;
+      results.message = 'No game folder is configured for this game instance yet.';
+      return results;
+    }
+
     const tpModsFolder = path.join(gamePath, 'EDHM-ini', '3rdPartyMods');
-    const results = { mods: [], errors: [] };
+    if (!fs.existsSync(tpModsFolder)) {
+      results.setupNeeded = true;
+      results.message = '3PMods folder was not found yet. Install EDHM for this game instance first.';
+      return results;
+    }
+
     const files = await readdir(tpModsFolder); 
 
     for (const file of files) {
@@ -521,6 +534,62 @@ async function GetInstalledTPMods(gamePath) {
 
 // #region Mod Installing
 
+async function copyExtractedModFiles(extractedRoot, gamePath, edhmIniTarget, shaderFixesTarget) {
+  const entries = fs.readdirSync(extractedRoot, { withFileTypes: true });
+  let files = 0;
+  let directories = 0;
+
+  for (const entry of entries) {
+    const sourcePath = path.join(extractedRoot, entry.name);
+    const entryName = entry.name.toLowerCase();
+
+    if (entry.isDirectory() && entryName === 'edhm-ini') {
+      const stats = await fileHelper.copyDirectoryRecursive(sourcePath, edhmIniTarget);
+      files += stats.files;
+      directories += stats.directories + 1;
+      continue;
+    }
+
+    if (entry.isDirectory() && entryName === 'shaderfixes') {
+      const stats = await fileHelper.copyDirectoryRecursive(sourcePath, shaderFixesTarget);
+      files += stats.files;
+      directories += stats.directories + 1;
+      continue;
+    }
+
+    const destinationPath = path.join(gamePath, entry.name);
+    if (entry.isDirectory()) {
+      const stats = await fileHelper.copyDirectoryRecursive(sourcePath, destinationPath);
+      files += stats.files;
+      directories += stats.directories + 1;
+    } else if (entry.isFile()) {
+      await fileHelper.copyFile(sourcePath, destinationPath, false);
+      files++;
+    }
+  }
+
+  return { files, directories };
+}
+
+async function installModArchive(edhmZipFile, gamePath, edhmIniTarget, shaderFixesTarget) {
+  if (process.platform !== 'darwin') {
+    return fileHelper.decompressFile(edhmZipFile, gamePath);
+  }
+
+  const tempExtractRoot = fileHelper.ensureDirectoryExists(
+    path.join(fileHelper.getTempRoot(), `edhm-mod-extract-${Date.now()}`)
+  );
+
+  try {
+    await fileHelper.decompressFile(edhmZipFile, tempExtractRoot);
+    const stats = await copyExtractedModFiles(tempExtractRoot, gamePath, edhmIniTarget, shaderFixesTarget);
+    console.log(`Installed extracted mod files: ${stats.files} files, ${stats.directories} directories`);
+    return true;
+  } finally {
+    fs.rmSync(tempExtractRoot, { recursive: true, force: true });
+  }
+}
+
 /** Installs the Mod and themes in their respective locations
  * @param {*} gameInstance Game instance where to install the mod  */
 async function installEDHMmod(gameInstance) {
@@ -557,14 +626,13 @@ async function installEDHMmod(gameInstance) {
 
     // #region SymLinks
 
-      try {
+    const Symlink_TargetFolder = path.join(userDataPath, GameType, 'EDHM');   
+    const edhmSymLinkTarget = fileHelper.ensureDirectoryExists(path.join(Symlink_TargetFolder, 'EDHM-Ini'));
+    const shaderSymLinkTarget = fileHelper.ensureDirectoryExists(path.join(Symlink_TargetFolder, 'ShaderFixes'));
+
+    try {
       console.log('Checking for Symlinks in Game Path: ', gamePath);
       
-      const Symlink_TargetFolder = path.join(userDataPath, GameType, 'EDHM');   
-
-      const edhmSymLinkTarget = fileHelper.ensureDirectoryExists(path.join(Symlink_TargetFolder, 'EDHM-Ini'));
-      const shaderSymLinkTarget = fileHelper.ensureDirectoryExists(path.join(Symlink_TargetFolder, 'ShaderFixes'));
-
       const SymlinkEdhmIni = await fileHelper.ensureSymlink(edhmSymLinkTarget, path.join(gamePath, 'EDHM-ini'));
       const SymlinkShaders = await fileHelper.ensureSymlink(shaderSymLinkTarget, path.join(gamePath, 'ShaderFixes'));
 
@@ -585,7 +653,7 @@ async function installEDHMmod(gameInstance) {
       const unzipGamePath = gamePath;
       const versionMatch = edhmZipFile.match(/v\d+\.\d+/); 
 
-      const _ret = await fileHelper.decompressFile(edhmZipFile, unzipGamePath);
+      const _ret = await installModArchive(edhmZipFile, unzipGamePath, edhmSymLinkTarget, shaderSymLinkTarget);
 
       Response.game = GameType;
       Response.version = versionMatch[0];

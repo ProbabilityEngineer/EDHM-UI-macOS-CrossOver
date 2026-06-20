@@ -49,12 +49,31 @@ function getTempRoot() {
   return path.join(getCacheRoot(), 'Temp');
 }
 
-function getConfiguredGraphicsFolder() {
+function getConfiguredProgramSettings() {
   try {
     const settingsPath = path.join(getAppDataRoot(), 'Settings.json');
     if (!fs.existsSync(settingsPath)) return null;
+    return JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  } catch (error) {
+    console.warn('Unable to read configured settings:', error.message);
+    return null;
+  }
+}
 
-    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+function getConfiguredBottleRoot() {
+  try {
+    const settings = getConfiguredProgramSettings();
+    if (!settings?.CrossOverBottlePath) return null;
+    return settings.CrossOverBottlePath;
+  } catch (error) {
+    console.warn('Unable to resolve CrossOverBottlePath from settings:', error.message);
+    return null;
+  }
+}
+
+function getConfiguredGraphicsFolder() {
+  try {
+    const settings = getConfiguredProgramSettings();
     if (!settings?.PlayerConfigFolder) return null;
 
     return resolveEnvVariables(settings.PlayerConfigFolder);
@@ -62,6 +81,119 @@ function getConfiguredGraphicsFolder() {
     console.warn('Unable to resolve PlayerConfigFolder from settings:', error.message);
     return null;
   }
+}
+
+function normalizeBottleRoot(bottleRoot = getConfiguredBottleRoot()) {
+  if (!bottleRoot || typeof bottleRoot !== 'string') return null;
+  return path.normalize(bottleRoot.replace(/^~(?=$|[\\/])/, os.homedir()));
+}
+
+function getBottleDriveCRoot(bottleRoot = getConfiguredBottleRoot()) {
+  const normalizedBottleRoot = normalizeBottleRoot(bottleRoot);
+  if (!normalizedBottleRoot) return null;
+
+  if (path.basename(normalizedBottleRoot).toLowerCase() === 'drive_c') {
+    return normalizedBottleRoot;
+  }
+
+  return path.join(normalizedBottleRoot, 'drive_c');
+}
+
+function detectBottleUserProfile(bottleRoot = getConfiguredBottleRoot()) {
+  const driveCRoot = getBottleDriveCRoot(bottleRoot);
+  if (!driveCRoot || !fs.existsSync(driveCRoot)) return null;
+
+  const usersRoot = path.join(driveCRoot, 'users');
+  if (!fs.existsSync(usersRoot)) return null;
+
+  const candidateNames = [
+    process.env.USER,
+    process.env.LOGNAME,
+    process.env.USERNAME,
+    'crossover',
+    'steamuser'
+  ].filter(Boolean);
+
+  for (const candidateName of candidateNames) {
+    const candidate = path.join(usersRoot, candidateName);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  const childDirs = fs.readdirSync(usersRoot, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => entry.name)
+    .filter(name => !['Public', 'Default', 'Default User', 'All Users'].includes(name));
+
+  const journalMatch = childDirs.find(name => fs.existsSync(path.join(usersRoot, name, 'Saved Games', 'Frontier Developments', 'Elite Dangerous')));
+  if (journalMatch) {
+    return path.join(usersRoot, journalMatch);
+  }
+
+  return childDirs.length ? path.join(usersRoot, childDirs[0]) : null;
+}
+
+function translateWindowsPathToHostPath(inputPath, bottleRoot = getConfiguredBottleRoot()) {
+  if (!inputPath || typeof inputPath !== 'string') return inputPath;
+
+  const windowsPath = inputPath.trim();
+  if (!/^[A-Za-z]:\\/.test(windowsPath)) {
+    return inputPath;
+  }
+
+  const driveCRoot = getBottleDriveCRoot(bottleRoot);
+  if (!driveCRoot || !fs.existsSync(driveCRoot)) {
+    return inputPath;
+  }
+
+  const driveLetter = windowsPath[0].toLowerCase();
+  const relativeWindowsPath = windowsPath.slice(3).split('\\').filter(Boolean);
+  const driveRoot = driveLetter === 'c'
+    ? driveCRoot
+    : path.join(path.dirname(driveCRoot), `drive_${driveLetter}`);
+
+  return path.join(driveRoot, ...relativeWindowsPath);
+}
+
+function extractBottleRootFromProcessLine(line) {
+  if (!line || typeof line !== 'string') return null;
+
+  const normalizedLine = line.replace(/\\/g, '/');
+  const match = normalizedLine.match(/(\/[^\r\n]*?\/drive_c)(?:\/|\s|$)/i);
+  if (!match?.[1]) return null;
+
+  return match[1].replace(/\/drive_c$/i, '');
+}
+
+function extractHostExecutablePathFromProcessLine(line, exeName) {
+  if (!line) return null;
+
+  // When CrossOver exposes a Windows target via /Executable, prefer the explicit
+  // Windows path parser below instead of greedily spanning from the host wrapper.
+  if (line.includes('/Executable ')) {
+    return null;
+  }
+
+  const normalizedLine = line.replace(/\\ /g, ' ');
+  const escapedExeName = exeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = normalizedLine.match(new RegExp(`(\/[^\r\n]*?${escapedExeName})(?=\s|$)`, 'i'));
+  return match?.[1]?.trim() || null;
+}
+
+function resolveDetectedExecutablePath(line, exeName) {
+  const hostExecutablePath = extractHostExecutablePathFromProcessLine(line, exeName);
+  if (hostExecutablePath) {
+    return hostExecutablePath;
+  }
+
+  const windowsExecutablePath = extractWindowsExecutablePathFromProcessLine(line, exeName);
+  if (!windowsExecutablePath) {
+    return null;
+  }
+
+  const inferredBottleRoot = extractBottleRootFromProcessLine(line);
+  return translateWindowsPathToHostPath(windowsExecutablePath, inferredBottleRoot || getConfiguredBottleRoot());
 }
 
 function resolveXmlFilePath(filePath) {
@@ -105,16 +237,19 @@ const resolveEnvVariables = (inputPath) => {
 
     // #region Resolve Environmental Variables
 
+    const bottleRoot = getConfiguredBottleRoot();
+    const bottleUserProfile = process.platform === 'darwin' ? detectBottleUserProfile(bottleRoot) : null;
+    const bottleDriveCRoot = process.platform === 'darwin' ? getBottleDriveCRoot(bottleRoot) : null;
     const envVars = {
-      '%USERPROFILE%': os.homedir(),
+      '%USERPROFILE%': bottleUserProfile || os.homedir(),
       '%APPDATA%': app.getPath('userData'),
-      '%LOCALAPPDATA%': getLocalAppDataPath(),
+      '%LOCALAPPDATA%': bottleUserProfile ? path.join(bottleUserProfile, 'AppData', 'Local') : getLocalAppDataPath(),
       '%EDHM_APPDATA%': getAppDataRoot(),
       '%EDHM_CACHEDATA%': getCacheRoot(),
       '%EDHM_TEMPDATA%': getTempRoot(),
-      '%PROGRAMFILES%': process.env.PROGRAMFILES || process.env['ProgramFiles'],
-      '%PROGRAMFILES(X86)%': process.env['PROGRAMFILES(X86)'] || process.env['ProgramFiles(x86)'],
-      '%PROGRAMDATA%': process.env.PROGRAMDATA,
+      '%PROGRAMFILES%': bottleDriveCRoot ? path.join(bottleDriveCRoot, 'Program Files') : (process.env.PROGRAMFILES || process.env['ProgramFiles']),
+      '%PROGRAMFILES(X86)%': bottleDriveCRoot ? path.join(bottleDriveCRoot, 'Program Files (x86)') : (process.env['PROGRAMFILES(X86)'] || process.env['ProgramFiles(x86)']),
+      '%PROGRAMDATA%': bottleDriveCRoot ? path.join(bottleDriveCRoot, 'ProgramData') : process.env.PROGRAMDATA,
       '%APPDIR%': app.getAppPath(),
       '$HOME': os.homedir(),
       '~': os.homedir(),
@@ -133,8 +268,16 @@ const resolveEnvVariables = (inputPath) => {
 
     // #endregion
 
+    if (process.platform === 'darwin' && /^[A-Za-z]:\\/.test(resolvedPath)) {
+      resolvedPath = translateWindowsPathToHostPath(resolvedPath, bottleRoot);
+    }
+
     // Normalize and clean the resolved path
     const isWindows = process.platform === 'win32';
+    const looksLikeWindowsPath = /^[A-Za-z]:\\/.test(resolvedPath);
+    if (looksLikeWindowsPath && !isWindows) {
+      return resolvedPath;
+    }
     resolvedPath = isWindows
       ? resolvedPath.replace(/\//g, '\\') // Convert forward slashes to backslashes for Windows
       : resolvedPath.replace(/\\/g, '/'); // Convert backslashes to forward slashes for Linux/Mac
@@ -919,6 +1062,15 @@ async function decompressFile(zipPath, outputDir) {
   if (!fs.existsSync(zipPath)) {
     throw new Error(`404 - ZIP file Not Found: '${zipPath}'`);
   }
+
+  ensureDirectoryExists(outputDir);
+
+  if (process.platform === 'darwin') {
+    await execFileAsync('/usr/bin/ditto', ['-x', '-k', zipPath, outputDir]);
+    console.log(`Uncompressed Files into '${outputDir}'`);
+    return true;
+  }
+
   let _ret = false;
   await zl.extract(zipPath, outputDir).then(function () {
     console.log(`Uncompressed Files into '${outputDir}'`);
@@ -968,6 +1120,41 @@ export function openUrlInBrowser(url) {
 /** detectProgram: devuelve la ruta completa al ejecutable si está corriendo
  * @param {string} exeName – nombre del ejecutable (incluye extensión en Windows, ej. "Game.exe")
  * @param {function(Error|null, string|null)} callback */
+function extractWindowsExecutablePathFromProcessLine(line, exeName) {
+  if (!line) return null;
+
+  const executableArgMarker = '/Executable ';
+  const executableArgsMarker = ' /ExecutableArgs';
+  const executableArgIndex = line.indexOf(executableArgMarker);
+  if (executableArgIndex >= 0) {
+    const start = executableArgIndex + executableArgMarker.length;
+    const end = line.indexOf(executableArgsMarker, start);
+    const candidate = (end >= 0 ? line.slice(start, end) : line.slice(start)).trim();
+    if (candidate.toLowerCase().endsWith(exeName.toLowerCase())) {
+      return candidate;
+    }
+  }
+
+  const inlineMatch = line.match(new RegExp(`([A-Za-z]:\\\\[^\r\n]*?${exeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`,'i'));
+  if (inlineMatch?.[1]) {
+    return inlineMatch[1].trim();
+  }
+
+  return null;
+}
+
+function getDarwinProcessCwd(pid) {
+  if (!pid) return null;
+
+  try {
+    const output = execSync(`lsof -a -p ${pid} -d cwd -Fn 2>/dev/null`, { encoding: 'utf8' });
+    const cwdLine = output.split(/\r?\n/).find(line => line.startsWith('n/'));
+    return cwdLine ? cwdLine.slice(1).trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 function detectProgram(exeName, callback) {
   const platform = os.platform();
 
@@ -994,10 +1181,38 @@ function detectProgram(exeName, callback) {
       callback(null, null);
     });
 
-  } else {
-    // Linux/macOS: pgrep + readlink
+  } else if (platform === 'darwin') {
     const safeName = exeName.replace(/["\\]/g, '\\\\$&');
-    const pgrepCmd = `pgrep -af "${safeName}"`; 
+    const psCommand = `ps -axo pid=,command= | grep -F "${safeName}" | grep -v grep`;
+
+    exec(psCommand, (err, stdout, stderr) => {
+      if (err || !stdout.trim()) {
+        return callback(err || new Error('No encontrado'), null);
+      }
+
+      const lines = stdout.trim().split(/\r?\n/);
+      for (const line of lines) {
+        if (line.toLowerCase().includes('launcher')) continue;
+
+        const trimmedLine = line.trim();
+        const [pid] = trimmedLine.split(/\s+/, 1);
+        const cwd = getDarwinProcessCwd(pid);
+        if (cwd && cwd.toLowerCase().includes('/drive_c/')) {
+          const cwdExe = path.join(cwd, exeName);
+          return callback(null, fs.existsSync(cwdExe) ? cwdExe : cwd);
+        }
+
+        const executablePath = resolveDetectedExecutablePath(line, exeName);
+        if (executablePath) {
+          return callback(null, executablePath);
+        }
+      }
+
+      callback(null, null);
+    });
+  } else {
+    const safeName = exeName.replace(/["\\]/g, '\\\\$&');
+    const pgrepCmd = `pgrep -af "${safeName}"`;
 
     exec(pgrepCmd, (err, stdout, stderr) => {
       if (err || !stdout.trim()) {
@@ -1005,18 +1220,13 @@ function detectProgram(exeName, callback) {
       }
 
       const lines = stdout.trim().split(/\r?\n/);
-      let found = false;
-
       for (const line of lines) {
-        if (found) break;
         if (line.toLowerCase().includes('launcher')) continue;
 
-        const [pid] = line.trim().split(' ', 1);
+        const [pid] = line.trim().split(/\s+/, 1);
         if (!pid) continue;
 
-        found = true;
-        //exec(`readlink -f /proc/${pid}/exe`, (err2, exePathOut) => {
-        exec(`readlink -f /proc/${pid}/cwd`, (err2, exePathOut) => {
+        return exec(`readlink -f /proc/${pid}/exe`, (err2, exePathOut) => {
           if (err2 || !exePathOut.trim()) {
             return callback(err2 || new Error('Fallo al leer ruta'), null);
           }
@@ -1024,9 +1234,7 @@ function detectProgram(exeName, callback) {
         });
       }
 
-      if (!found) {
-        callback(null, null);
-      }
+      callback(null, null);
     });
   }
 }
@@ -1643,6 +1851,30 @@ ipcMain.handle('resolve-env-variables', async (event, inputPath) => {
   } catch (error) {
     console.error('Failed to resolve environment variables:', error);
     //logEvent(error.message, error.stack);
+    throw new Error(error.message + error.stack);
+  }
+});
+ipcMain.handle('translate-windows-path', async (event, inputPath) => {
+  try {
+    return translateWindowsPathToHostPath(inputPath);
+  } catch (error) {
+    console.error('Failed to translate Windows path:', error);
+    throw new Error(error.message + error.stack);
+  }
+});
+
+ipcMain.handle('get-bottle-paths', async (event, bottleRoot) => {
+  try {
+    const normalizedBottleRoot = normalizeBottleRoot(bottleRoot);
+    const bottleUserProfile = detectBottleUserProfile(normalizedBottleRoot);
+    return {
+      bottleRoot: normalizedBottleRoot || '',
+      userProfile: bottleUserProfile || '',
+      playerJournal: bottleUserProfile ? path.join(bottleUserProfile, 'Saved Games', 'Frontier Developments', 'Elite Dangerous') : '',
+      playerConfigFolder: bottleUserProfile ? path.join(bottleUserProfile, 'AppData', 'Local', 'Frontier Developments', 'Elite Dangerous', 'Options', 'Graphics') : ''
+    };
+  } catch (error) {
+    console.error('Failed to infer bottle paths:', error);
     throw new Error(error.message + error.stack);
   }
 });

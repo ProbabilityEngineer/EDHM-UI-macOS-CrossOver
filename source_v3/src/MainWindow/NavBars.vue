@@ -55,7 +55,7 @@
               <i class="bi bi-arrow-bar-down"></i>
             </button>
             <button id="cmdSaveTheme" class="btn btn-outline-secondary" type="button" data-bs-toggle="tooltip"
-              data-bs-placement="bottom" data-bs-title="Save Theme" @mousedown="saveTheme_Click">
+              data-bs-placement="bottom" data-bs-title="Save Theme Changes" @mousedown="saveTheme_Click">
               <i class="bi bi-floppy"></i>
             </button>
             <button id="cmdReloadThemes" class="btn btn-outline-secondary" type="button" data-bs-toggle="tooltip"
@@ -159,7 +159,8 @@
           <!-- Game Selection Dropdown -->
           <div class="nav-item">
             <select id="gameSelect" class="form-select game-dropdown-border main-menu-style" v-model="selectedGame"
-              @change="OnGameInstanceChange">
+              @change="OnGameInstanceChange" :disabled="gameMenuItems.length === 0">
+              <option v-if="gameMenuItems.length === 0" value="">No game configured</option>
               <option v-for="(game, index) in gameMenuItems" :key="index" :value="game">{{ game }}</option>
             </select>
           </div>
@@ -277,34 +278,56 @@ export default {
   },
   methods: {
 
+    async hydrateFooterState(settings) {
+      this.programSettings = settings || this.programSettings || {};
+      this.appVersion = await window.api.getAppVersion();
+      this.modVersion = this.programSettings.Version_ODYSS || this.programSettings.Version_HORIZ || '';
+      this.showFavorites = !!this.programSettings.FavToogle;
+      this.activeTab = ref('themes');
+
+      const configuredGameInstances = (this.programSettings.GameInstances || [])
+        .flatMap(instance => instance.games || [])
+        .filter(game => game?.path)
+        .map(game => game.instance)
+        .filter(Boolean);
+      this.gameMenuItems = [...new Set(configuredGameInstances)];
+      if (this.gameMenuItems.length === 0) {
+        this.selectedGame = '';
+      }
+
+      try {
+        this.ActiveInstance = await window.api.getActiveInstance();
+        this.selectedGame = this.ActiveInstance?.instance || this.programSettings.ActiveInstance || '';
+        if (!this.gameMenuItems.includes(this.selectedGame) && this.gameMenuItems.length > 0) {
+          this.selectedGame = this.gameMenuItems[0];
+        }
+      } catch (error) {
+        this.ActiveInstance = {};
+        this.selectedGame = this.programSettings.ActiveInstance || '';
+      }
+
+      if (this.gameMenuItems.length === 0) {
+        this.selectedGame = '';
+      }
+    },
     async OnInitialize(settings) {
       try {
         console.log('Initializing NavBars..');
 
-        this.programSettings = settings;
-        this.appVersion = await window.api.getAppVersion();
-        this.modVersion = settings.Version_ODYSS;
-        this.ActiveInstance = await window.api.getActiveInstance();
-        this.selectedGame = this.ActiveInstance.instance;
-        this.showFavorites = settings.FavToogle;
-        this.activeTab = ref('themes');
+        await this.hydrateFooterState(settings);
 
-        this.DATA_DIRECTORY = await window.api.GetInstanceDataDirectory(this.ActiveInstance.key); //<- Returns the path to the EDHM data directory.
-        console.log('DATA_DIRECTORY:', this.DATA_DIRECTORY);
+        if (this.ActiveInstance?.key) {
+          this.DATA_DIRECTORY = await window.api.GetInstanceDataDirectory(this.ActiveInstance.key); //<- Returns the path to the EDHM data directory.
+          console.log('DATA_DIRECTORY:', this.DATA_DIRECTORY);
+        }
 
-        // Populate game instances with the `instance` values from `Settings`
-        this.gameMenuItems = ref(
-          settings.GameInstances.flatMap(instance =>
-            instance.games
-              .filter(game => game.path) // only include games with non-empty 'path'
-              .map(game => game.instance)
-          )
-        );
-
-        this.themeTemplate = await this.LoadCurrentSettings();
-        EventBus.emit('OnSelectTheme', { id: 0 });   //<- Event Listened at 'ThemeTab.vue'    
-
-        await this.History_LoadElements();
+        if (this.ActiveInstance?.path) {
+          this.themeTemplate = await this.LoadCurrentSettings();
+          EventBus.emit('OnSelectTheme', { id: 0 });   //<- Event Listened at 'ThemeTab.vue'
+          await this.History_LoadElements();
+        } else {
+          this.historyOptions = [];
+        }
 
       } catch (error) {
         EventBus.emit('ShowError', error);
@@ -685,13 +708,11 @@ export default {
         const HistoryFolder = window.api.joinPath(this.DATA_DIRECTORY, 'History');            //console.log('HistoryFolder:', HistoryFolder);
         const files = await window.api.loadHistory(HistoryFolder, NumberOfSavesToRemember);   //console.log(files);        
 
-        this.historyOptions = ref(
-          files.map(file => ({
-            value: file.name,
-            text: file.date,
-            tag: file.path  // Add the file path as a tag
-          }))
-        );
+        this.historyOptions = files.map(file => ({
+          value: file.name,
+          text: file.date,
+          tag: file.path  // Add the file path as a tag
+        }));
         //console.log('History:', this.historyOptions);
 
       } catch (error) {
@@ -835,7 +856,7 @@ export default {
       // happens when the mod gets updated
       this.programSettings = data;
       //console.log('programSettings: ', programSettings);
-      this.modVersion = data.Version_ODYSS;
+      this.modVersion = data.Version_ODYSS || data.Version_HORIZ || '';
     },
     OnXmlChanged(data) {
       console.log('XML Changed:', data);
@@ -986,7 +1007,7 @@ export default {
 
 
   },
-  mounted() {
+  async mounted() {
     /* EVENTS WE LISTEN TO HERE:  */
     EventBus.on('InitializeNavBars', this.OnInitialize);
     EventBus.on('setActiveTab', this.setActiveTab);
@@ -1001,6 +1022,13 @@ export default {
 
     if (typeof this.progressListener === 'function') {
       window.api.removeDownloadProgressListener(this.progressListener);
+    }
+
+    try {
+      const settings = await window.api.getSettings();
+      await this.hydrateFooterState(settings);
+    } catch (error) {
+      console.warn('Unable to pre-hydrate NavBars footer state:', error);
     }
   },
   beforeUnmount() {
@@ -1148,6 +1176,9 @@ body {
   background-color: darkorange;
   color: rgb(12, 12, 12);
   border: none;
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+  line-height: 1.5;
 }
 
 .btn-apply-theme:hover {
