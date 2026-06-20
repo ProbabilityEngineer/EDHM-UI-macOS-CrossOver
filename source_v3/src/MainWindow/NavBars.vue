@@ -20,7 +20,7 @@
               <option value="" disabled>──────────</option>
               <option value="mnuInstallMod">Install EDHM</option>
               <option value="mnuUninstallMod">Un-install EDHM</option>
-              <option value="mnuDisableMod">Enable/Disable EDHM</option>
+              <option value="mnuDisableMod">{{ edhmToggleMenuLabel }}</option>
               <option value="" disabled>──────────</option>
               <option value="mnuGoToDiscord">Help? Join our Discord</option>
               <option value="mnuReadManual">Read the Manual</option>
@@ -253,6 +253,7 @@ export default {
       modVersion: '',
       selectedGame: '',
       gameMenuItems: [],
+      edhmInstalled: null,
 
       showProgressBar: false,
       progressValue: 0,
@@ -275,6 +276,13 @@ export default {
     PropertiesTabEx,
     UserSettingsTab,
     GlobalSettingsTab
+  },
+  computed: {
+    edhmToggleMenuLabel() {
+      if (this.edhmInstalled === true) return 'Disable EDHM';
+      if (this.edhmInstalled === false) return 'Enable EDHM';
+      return 'Enable/Disable EDHM';
+    }
   },
   methods: {
 
@@ -310,11 +318,24 @@ export default {
         this.selectedGame = '';
       }
     },
+    async refreshEdhmInstallState() {
+      try {
+        if (!this.ActiveInstance?.path) {
+          this.edhmInstalled = false;
+          return;
+        }
+        this.edhmInstalled = await window.api.CheckEDHMinstalled(this.ActiveInstance.path);
+      } catch (error) {
+        console.warn('Could not determine EDHM install state:', error);
+        this.edhmInstalled = null;
+      }
+    },
     async OnInitialize(settings) {
       try {
         console.log('Initializing NavBars..');
 
         await this.hydrateFooterState(settings);
+        await this.refreshEdhmInstallState();
 
         if (this.ActiveInstance?.key) {
           this.DATA_DIRECTORY = await window.api.GetInstanceDataDirectory(this.ActiveInstance.key); //<- Returns the path to the EDHM data directory.
@@ -524,14 +545,17 @@ export default {
         if (value === 'mnuUninstallMod') {
           const _ret = await window.api.UninstallEDHMmod(JSON.parse(JSON.stringify(ActiveInstance)));
           if (_ret) {
+            this.edhmInstalled = false;
             EventBus.emit('RoastMe', { type: 'Success', message: 'EDHM Un-Installed!' });
           }
         }
         if (value === 'mnuDisableMod') {
-          const _ret = await window.api.DisableEDHMmod(JSON.parse(JSON.stringify(ActiveInstance)));
-          if (_ret) {
-            EventBus.emit('RoastMe', { type: 'Success', message: 'EDHM Disabled!' });
-          }
+          EventBus.emit('RoastMe', {
+            type: 'Info',
+            message: this.edhmInstalled
+              ? 'Disable EDHM is not implemented yet.'
+              : 'Enable EDHM is not implemented yet.'
+          });
         }
         if (value === 'mnuGoToDiscord') {
           await window.api.openUrlInBrowser('https://discord.gg/ZaRt6bCXvj');
@@ -852,11 +876,13 @@ export default {
       //  -> showHideSpinner({ visible: true });
     },
 
-    OnModUpdated(data) {
+    async OnModUpdated(data) {
       // happens when the mod gets updated
       this.programSettings = data;
       //console.log('programSettings: ', programSettings);
       this.modVersion = data.Version_ODYSS || data.Version_HORIZ || '';
+      await this.hydrateFooterState(data);
+      await this.refreshEdhmInstallState();
     },
     OnXmlChanged(data) {
       console.log('XML Changed:', data);

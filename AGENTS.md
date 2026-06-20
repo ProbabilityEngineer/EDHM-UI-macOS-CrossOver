@@ -16,7 +16,7 @@ These instructions apply to the entire `EDHM_UI` repo.
 - Start with the most specific code-intelligence tool available.
 - Use explicit repo-relative paths in reads, searches, and edits.
 - For syntax-shaped requests, prefer AST/LSP before broad text search.
-- For behavior or intent requests, prefer semantic/code-intelligence search before file listing.
+- For behavior or intent requests, prefer Semble or semantic/code-intelligence search before file listing.
 - Use diagnostics before broad builds when an LSP is available.
 - Be careful not to mix the legacy `source/` app and the current `source_v3/` Electron app unless the task explicitly spans both.
 
@@ -47,8 +47,11 @@ These instructions apply to the entire `EDHM_UI` repo.
 - Before starting work, inspect `jj status`.
 - After a coherent agent-owned change, run `jj describe -m "message"` and `jj new --no-edit`.
 - Keep `@` empty when a change is complete; the finished work should sit in `@-`.
+- Before declaring work pushed, verify the target bookmark, `main@git`, and `main@origin` point to `@-`, and Git HEAD is attached to `main`.
+- If `jj new --no-edit` leaves `@` on completed work, switch to the empty child before moving a bookmark.
 - Use clear `jj describe` messages because they are part of the working record for this repo.
 - Prefer `/jj-align-push [branch]` for final alignment/publishing when requested.
+
 
 ## Remote layout
 

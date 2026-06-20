@@ -239,3 +239,7 @@ Suppressed misleading startup update prompt on macOS: AnalyseUpdate now checks p
 **2026-06-20T16:08:10Z**
 
 Packaged and published experimental macOS/CrossOver PoC release to GitHub: https://github.com/ProbabilityEngineer/EDHM_UI/releases/tag/macos-crossover-poc-2026-06-20. Artifact: EDHM-UI-V3-macos-crossover-poc-darwin-arm64.zip, built from macos-crossover-poc at d9f67e9e after Node 22 Forge package validation.
+
+**2026-06-20T18:32:35Z**
+
+Published point prerelease including only the post-release keyboard-navigation change for ThemeTab. Commit: 507c7903 Add keyboard navigation for theme selection. Release: https://github.com/ProbabilityEngineer/EDHM_UI/releases/tag/macos-crossover-poc-2026-06-20.1 with artifact EDHM-UI-V3-macos-crossover-poc-darwin-arm64-2026-06-20.1.zip.
