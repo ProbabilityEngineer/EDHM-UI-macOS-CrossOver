@@ -207,3 +207,7 @@ Follow-up from testing: removed redundant Theme Preview context-menu item becaus
 **2026-06-20T14:36:49Z**
 
 Integrated CrossOver DLL override handling into the app: Install EDHM now sets d3d11 and d3dcompiler_47 to native,builtin when a Bottle Root is configured on macOS; settings UIs now include a 'Set EDHM DLL Overrides' button beside Bottle Root; the game localization wizard offers to set overrides when it detects a CrossOver bottle. Package validation passed.
+
+**2026-06-20T14:53:18Z**
+
+Rearranged settings layout: Player Journal, Bottle Root, and Graphics Config XML Folder now each use their own full-width line where available; DLL override action moved to its own small button below Bottle Root; removed the printed Windows default Graphics XML path hint; Number of Themes to Save is now a compact numeric input with spinner controls and range 1-999. Rebuilt successfully.

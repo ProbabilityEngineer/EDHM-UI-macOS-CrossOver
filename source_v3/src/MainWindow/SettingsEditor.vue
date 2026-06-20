@@ -71,13 +71,15 @@
                                     <div class="row">
                                         <div class="col">
                                             <label for="crossOverBottlePath">Bottle Root:</label>
-                                            <div id="crossOverBottlePath" class="input-group mb-3">
+                                            <div id="crossOverBottlePath" class="input-group mb-2">
                                                 <input type="text" class="form-control form-control-sm"
                                                     placeholder="Pick the bottle folder that contains drive_c" aria-label="Pick a Location"
                                                     aria-describedby="button-addon-bottle" v-model="config.CrossOverBottlePath">
                                                 <button class="btn btn-outline-secondary" type="button"
                                                     id="button-addon-bottle" @click="browseBottleFolder">Browse</button>
-                                                <button class="btn btn-outline-info" type="button"
+                                            </div>
+                                            <div class="mb-3">
+                                                <button class="btn btn-outline-info btn-sm" type="button"
                                                     @click="runCrossOverDllOverrides">Set EDHM DLL Overrides</button>
                                             </div>
                                         </div>
@@ -85,8 +87,8 @@
                                     <div class="row">
                                         <div class="col">
                                             <label for="quantity">Number of Themes to Save:</label>
-                                            <input type="number" class="form-control" id="quantity" min="1" max="50"
-                                                v-model="config.SavesToRemember">
+                                            <input type="number" class="form-control form-control-sm" id="quantity" min="1" max="999" step="1"
+                                                inputmode="numeric" style="max-width: 5rem;" v-model="config.SavesToRemember">
                                         </div>
                                     </div>
                                 </div>

@@ -71,7 +71,7 @@
                     </div>
                     <div class="card-body">
                         <div class="row">
-                            <div class="col">
+                            <div class="col-12">
                                 <label for="playerJournal">Player's Journal Location:</label>
                                 <div id="playerJournal" class="input-group mb-3">
                                     <input type="text" class="form-control form-control-sm"
@@ -83,9 +83,12 @@
                                     </button>
                                 </div>
                             </div>
-                            <div class="col">
+                        </div>
+
+                        <div class="row">
+                            <div class="col-12">
                                 <label for="crossOverBottlePath">Bottle Root:</label>
-                                <div id="crossOverBottlePath" class="input-group mb-3">
+                                <div id="crossOverBottlePath" class="input-group mb-2">
                                     <input type="text" class="form-control form-control-sm"
                                         placeholder="Pick the bottle folder that contains drive_c" aria-label="Pick a Location"
                                         aria-describedby="button-addon-bottle" v-model="config.CrossOverBottlePath" />
@@ -93,18 +96,17 @@
                                         @click="browseBottleFolder">
                                         Browse
                                     </button>
-                                    <button class="btn btn-outline-info" type="button" @click="runCrossOverDllOverrides">
+                                </div>
+                                <div class="mb-3">
+                                    <button class="btn btn-outline-info btn-sm" type="button" @click="runCrossOverDllOverrides">
                                         Set EDHM DLL Overrides
                                     </button>
-                                </div>
-                                <div class="form-text text-light opacity-75">
-                                    Needed on mac when Elite is installed inside a non-standard CrossOver bottle location.
                                 </div>
                             </div>
                         </div>
 
                         <div class="row">
-                            <div class="col">
+                            <div class="col-12">
                                 <label for="playerConfigFolder">Graphics Config XML Folder:</label>
                                 <div id="playerConfigFolder" class="input-group mb-3">
                                     <input type="text" class="form-control form-control-sm"
@@ -115,17 +117,14 @@
                                         Browse
                                     </button>
                                 </div>
-                                <div class="form-text text-light opacity-75">
-                                    Windows default: %USERPROFILE%\\AppData\\Local\\Frontier Developments\\Elite Dangerous\\Options\\Graphics
-                                </div>
                             </div>
                         </div>
 
                         <div class="row">
-                            <div class="col">
+                            <div class="col-auto">
                                 <label for="quantity">Number of Themes to Save:</label>
-                                <input type="number" class="form-control" id="quantity" min="1" max="50"
-                                    v-model="config.SavesToRemember" />
+                                <input type="number" class="form-control form-control-sm" id="quantity" min="1" max="999" step="1"
+                                    inputmode="numeric" style="max-width: 5rem;" v-model="config.SavesToRemember" />
                             </div>
                         </div>
 
