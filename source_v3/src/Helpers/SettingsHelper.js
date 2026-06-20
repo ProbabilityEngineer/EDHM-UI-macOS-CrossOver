@@ -590,6 +590,103 @@ async function installModArchive(edhmZipFile, gamePath, edhmIniTarget, shaderFix
   }
 }
 
+const EDHM_CROSSOVER_DLL_OVERRIDES = {
+  d3d11: 'native,builtin',
+  d3dcompiler_47: 'native,builtin',
+};
+
+function getCrossOverBottleRoot(gameInstance) {
+  return gameInstance?.CrossOverBottlePath || programSettings?.CrossOverBottlePath || '';
+}
+
+async function setCrossOverDllOverrides(bottleRoot) {
+  if (process.platform !== 'darwin') {
+    return { skipped: true, changed: false, reason: 'CrossOver DLL overrides are only needed on macOS.' };
+  }
+
+  if (!Util.isNotNullOrEmpty(bottleRoot)) {
+    return { skipped: true, changed: false, reason: 'No CrossOver bottle root configured.' };
+  }
+
+  const userRegPath = path.join(fileHelper.resolveEnvVariables(bottleRoot), 'user.reg');
+  if (!fs.existsSync(userRegPath)) {
+    throw new Error(`CrossOver bottle user.reg not found: ${userRegPath}`);
+  }
+
+  const sectionHeader = '[Software\\\\Wine\\\\DllOverrides]';
+  const original = fs.readFileSync(userRegPath, 'utf8');
+  const hadTrailingNewline = original.endsWith('\n');
+  const lines = original.split(/\r?\n/);
+  if (lines.length > 0 && lines[lines.length - 1] === '') {
+    lines.pop();
+  }
+
+  let sectionIndex = lines.findIndex(line => line.trim().toLowerCase() === sectionHeader.toLowerCase());
+  let changed = false;
+
+  if (sectionIndex === -1) {
+    if (lines.length > 0 && lines[lines.length - 1].trim() !== '') {
+      lines.push('');
+    }
+    lines.push(`${sectionHeader} ${Math.floor(Date.now() / 1000)}`);
+    sectionIndex = lines.length - 1;
+    changed = true;
+  }
+
+  let nextSectionIndex = lines.length;
+  for (let i = sectionIndex + 1; i < lines.length; i++) {
+    if (lines[i].startsWith('[')) {
+      nextSectionIndex = i;
+      break;
+    }
+  }
+
+  for (const [dllName, loadOrder] of Object.entries(EDHM_CROSSOVER_DLL_OVERRIDES)) {
+    const desiredLine = `"${dllName}"="${loadOrder}"`;
+    const prefix = `"${dllName.toLowerCase()}"=`;
+    let foundIndex = -1;
+
+    for (let i = sectionIndex + 1; i < nextSectionIndex; i++) {
+      if (lines[i].toLowerCase().startsWith(prefix)) {
+        foundIndex = i;
+        break;
+      }
+    }
+
+    if (foundIndex >= 0) {
+      if (lines[foundIndex] !== desiredLine) {
+        lines[foundIndex] = desiredLine;
+        changed = true;
+      }
+    } else {
+      lines.splice(nextSectionIndex, 0, desiredLine);
+      nextSectionIndex++;
+      changed = true;
+    }
+  }
+
+  let backupPath = null;
+  if (changed) {
+    const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '-');
+    backupPath = path.join(path.dirname(userRegPath), `user.reg.backup-${timestamp}`);
+    fs.copyFileSync(userRegPath, backupPath);
+    fs.writeFileSync(userRegPath, lines.join('\n') + (hadTrailingNewline ? '\n' : ''), 'utf8');
+  }
+
+  return {
+    skipped: false,
+    changed,
+    bottleRoot: fileHelper.resolveEnvVariables(bottleRoot),
+    userRegPath,
+    backupPath,
+    overrides: EDHM_CROSSOVER_DLL_OVERRIDES,
+  };
+}
+
+async function setCrossOverDllOverridesForInstance(gameInstance) {
+  return setCrossOverDllOverrides(getCrossOverBottleRoot(gameInstance));
+}
+
 /** Installs the Mod and themes in their respective locations
  * @param {*} gameInstance Game instance where to install the mod  */
 async function installEDHMmod(gameInstance) {
@@ -688,6 +785,15 @@ async function installEDHMmod(gameInstance) {
     await fileHelper.copyFile(_Source, _Destiny, false);
 
     // #endregion
+
+    Response.crossOverDllOverrides = await setCrossOverDllOverridesForInstance(gameInstance);
+    if (Response.crossOverDllOverrides?.skipped) {
+      console.log('CrossOver DLL overrides skipped:', Response.crossOverDllOverrides.reason);
+    } else if (Response.crossOverDllOverrides?.changed) {
+      console.log('CrossOver DLL overrides updated:', Response.crossOverDllOverrides.userRegPath);
+    } else {
+      console.log('CrossOver DLL overrides already configured:', Response.crossOverDllOverrides.userRegPath);
+    }
 
     console.log(`------ EDHM ${Response.version} Installed! ------`);
   } catch (error) {
@@ -1140,6 +1246,13 @@ ipcMain.handle('installEDHMmod', (event, gameInstance) => {
     throw new Error(error.message + error.stack);
   }
 });
+ipcMain.handle('setCrossOverDllOverrides', (event, bottleRoot) => {
+  try {
+    return setCrossOverDllOverrides(bottleRoot);
+  } catch (error) {
+    throw new Error(error.message + error.stack);
+  }
+});
 ipcMain.handle('CheckEDHMinstalled', (event, gamePath) => {
   try {
     return CheckEDHMinstalled(gamePath);
@@ -1190,7 +1303,7 @@ ipcMain.handle('DoHotFix', async (event) => {
 
 export default { 
   initializeSettings, loadSettings, saveSettings, 
-  installEDHMmod, CheckEDHMinstalled, 
+  installEDHMmod, CheckEDHMinstalled, setCrossOverDllOverrides,
   getInstanceByName, getActiveInstance, getActiveInstanceEx,
   GetInstanceDataDirectory,
   LoadGlobalSettings, saveGlobalSettings,

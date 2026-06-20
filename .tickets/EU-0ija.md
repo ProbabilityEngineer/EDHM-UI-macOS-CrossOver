@@ -203,3 +203,7 @@ Patched theme preview UX: selecting a theme now shows its preview image in the m
 **2026-06-20T14:22:43Z**
 
 Follow-up from testing: removed redundant Theme Preview context-menu item because single-click now previews inside EDHM_UI. ThemeTab now reads current EDHM-ini/ThemeSettings.json on load, labels Current Settings with the applied theme name, uses the applied theme thumbnail for Current Settings when matched, and auto-selects the last selected theme per active instance using localStorage, falling back to the applied theme. Applying a theme now updates the remembered selected theme too. Rebuilt successfully.
+
+**2026-06-20T14:36:49Z**
+
+Integrated CrossOver DLL override handling into the app: Install EDHM now sets d3d11 and d3dcompiler_47 to native,builtin when a Bottle Root is configured on macOS; settings UIs now include a 'Set EDHM DLL Overrides' button beside Bottle Root; the game localization wizard offers to set overrides when it detects a CrossOver bottle. Package validation passed.

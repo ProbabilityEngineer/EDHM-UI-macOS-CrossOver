@@ -77,6 +77,8 @@
                                                     aria-describedby="button-addon-bottle" v-model="config.CrossOverBottlePath">
                                                 <button class="btn btn-outline-secondary" type="button"
                                                     id="button-addon-bottle" @click="browseBottleFolder">Browse</button>
+                                                <button class="btn btn-outline-info" type="button"
+                                                    @click="runCrossOverDllOverrides">Set EDHM DLL Overrides</button>
                                             </div>
                                         </div>
                                     </div>
@@ -363,6 +365,33 @@ export default {
                 this.config.CrossOverBottlePath = filePath[0];
             }
         },
+        async runCrossOverDllOverrides() {
+            try {
+                if (!this.config.CrossOverBottlePath) {
+                    await window.api.ShowMessageBox({
+                        type: 'warning',
+                        buttons: ['OK'],
+                        title: 'Bottle Root Required',
+                        message: 'Select a CrossOver Bottle Root first.',
+                        detail: 'The bottle root is the folder that contains drive_c and user.reg.'
+                    });
+                    return;
+                }
+
+                const result = await window.api.setCrossOverDllOverrides(this.config.CrossOverBottlePath);
+                await window.api.ShowMessageBox({
+                    type: result.changed ? 'info' : 'none',
+                    buttons: ['OK'],
+                    title: 'EDHM DLL Overrides',
+                    message: result.changed ? 'CrossOver DLL overrides were updated.' : 'CrossOver DLL overrides are already set.',
+                    detail: result.changed
+                        ? `Updated ${result.userRegPath}\nBackup: ${result.backupPath}\n\nRestart CrossOver/Elite if it was already running.`
+                        : `Bottle: ${result.bottleRoot}\n\nd3d11 and d3dcompiler_47 are set to native,builtin.`
+                });
+            } catch (error) {
+                EventBus.emit('ShowError', error);
+            }
+        },
         
         /* Cleans html tags */
         sanitizeId(id) {
@@ -414,6 +443,20 @@ export default {
                 this.config.CrossOverBottlePath = inferredBottleRoot;
             }
             await this.applyInferredBottlePaths(this.config.CrossOverBottlePath || inferredBottleRoot);
+            if (this.config.CrossOverBottlePath) {
+                const overrideResult = await window.api.ShowMessageBox({
+                    type: 'question',
+                    buttons: ['Not Now', 'Set EDHM DLL Overrides'],
+                    defaultId: 1,
+                    cancelId: 0,
+                    title: 'CrossOver Bottle Detected',
+                    message: 'Set the EDHM CrossOver DLL overrides for this bottle?',
+                    detail: 'EDHM needs d3d11 and d3dcompiler_47 set to native,builtin in CrossOver. You can also run this later from the Bottle Root row.'
+                });
+                if (overrideResult.response === 1) {
+                    await this.runCrossOverDllOverrides();
+                }
+            }
 
             const inferredPublisherIndex = this.inferPublisherIndexFromPath(FolderPath);
             if (inferredPublisherIndex >= 0) {

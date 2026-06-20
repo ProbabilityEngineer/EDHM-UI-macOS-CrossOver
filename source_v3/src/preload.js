@@ -158,6 +158,7 @@ contextBridge.exposeInMainWorld('api', {
   saveHistory: (historyFolder, theme) => ipcRenderer.invoke('save-history', historyFolder, theme),
 
   installEDHMmod: (gameInstance) => ipcRenderer.invoke('installEDHMmod', gameInstance),
+  setCrossOverDllOverrides: (bottleRoot) => ipcRenderer.invoke('setCrossOverDllOverrides', bottleRoot),
   CheckEDHMinstalled: (gamePath) => ipcRenderer.invoke('CheckEDHMinstalled', gamePath),
   UninstallEDHMmod: (gameInstance) => ipcRenderer.invoke('UninstallEDHMmod', gameInstance),
   DisableEDHMmod: (gameInstance) => ipcRenderer.invoke('DisableEDHMmod', gameInstance),
