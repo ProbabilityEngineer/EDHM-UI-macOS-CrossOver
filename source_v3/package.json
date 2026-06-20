@@ -37,5 +37,10 @@
     "electron-squirrel-startup": "^1.0.1",
     "mitt": "^3.0.1",
     "zip-lib": "^1.0.5"
+  },
+  "allowScripts": {
+    "electron@33.2.1": true,
+    "electron-winstaller@5.4.0": true,
+    "esbuild@0.21.5": true
   }
 }

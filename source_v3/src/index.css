@@ -1,17 +1,46 @@
 :root {
-  --user-font-size: 14px; /* valor por defecto */
+  --user-font-size: 12px; /* smaller default for mac packaging */
   --bs-body-font-size: var(--user-font-size);
+  --bs-btn-font-size: 0.95rem;
+  --bs-btn-padding-y: 0.35rem;
+  --bs-btn-padding-x: 0.7rem;
+  --bs-nav-link-padding-y: 0.45rem;
+  --bs-nav-link-padding-x: 0.8rem;
+  --bs-form-control-padding-y: 0.35rem;
+  --bs-form-control-padding-x: 0.65rem;
 }
 
 body {
   font-size: var(--user-font-size) !important;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
     Arial, sans-serif;
-  margin: auto;
-  max-width: 38rem;
-  padding: 2rem;
+  margin: 0;
+  max-width: none;
+  padding: 0;
   background-color: #1F1F1F; /* Dark background color */
   color: #ffffff; /* Light text color */
+}
+
+#app {
+  font-size: var(--user-font-size);
+}
+
+.btn,
+.form-control,
+.form-select,
+.nav-link,
+.navbar-text {
+  font-size: inherit;
+}
+
+.btn {
+  padding: var(--bs-btn-padding-y) var(--bs-btn-padding-x);
+}
+
+.form-control,
+.form-select {
+  padding-top: var(--bs-form-control-padding-y);
+  padding-bottom: var(--bs-form-control-padding-y);
 }
 .custom-popover {
   max-width: 370px !important; /* The !important is often necessary to override Bootstrap */

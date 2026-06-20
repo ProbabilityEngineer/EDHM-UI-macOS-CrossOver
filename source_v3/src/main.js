@@ -98,15 +98,18 @@ async function Start() {
     // initialization and is ready to create browser windows.
     // Some APIs can only be used after this event occurs.
     app.whenReady().then(async () => {
-      // Ajustar el Escalado de imagen a la pantalla:
+      // Ajustar el escalado de la UI:
       const { size, scaleFactor: systemScale } = screen.getPrimaryDisplay();
       let userScale = settingsHelper.readSetting('UiScaleFactor', 0); // 0 = automático
       let finalScale;
-      if (userScale && userScale > 0) {        
+      if (userScale && userScale > 0) {
         finalScale = userScale; //<- Usuario forzó un valor
-      } else {        
+      } else if (process.platform === 'darwin') {
+        // macOS/Retina already handles HiDPI correctly; using the raw system scale
+        // here makes the whole UI comically large.
+        finalScale = 1;
+      } else {
         finalScale = systemScale; //<- Automático: usa el del sistema
-        // Ejemplo de regla extra: si es 4K, mínimo 1.5
         if (size.width >= 3840) {
           finalScale = Math.max(finalScale, 1.5);
         }
@@ -247,6 +250,14 @@ const createWindow = () => {
       mainWindow.hide(); // arranca minimizada en tray
     } else {
       mainWindow.show(); // arranca visible normalmente
+      mainWindow.focus();
+    }
+  });
+
+  mainWindow.webContents.once('did-finish-load', () => {
+    if (!(StartMinimizedToTray && process.platform === 'win32') && !mainWindow.isVisible()) {
+      mainWindow.show();
+      mainWindow.focus();
     }
   });
   // Handle external links

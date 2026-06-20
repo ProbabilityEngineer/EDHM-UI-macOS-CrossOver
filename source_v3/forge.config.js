@@ -9,54 +9,64 @@ function safeInclude(n) { return fs.existsSync(n) ? n : null }
 
 
 
-/* ---  FOR WINDOWS --- */
-module.exports = {
-  packagerConfig: {
-    asar: true,
-    extraResource: [
-      'src/data',
-      'src/images',
-      'public',
-      'out/renderer/settings_window'
-    ],
-    icon: path.join(__dirname, 'src', 'images', 'Icon_v3_a0.ico'), //'public/images/Icon_v3_a0.ico'
-    appCategoryType: 'public.app-category.developer-tools',
+const isMac = process.platform === 'darwin';
+const isWindows = process.platform === 'win32';
+
+const commonPackagerConfig = {
+  asar: true,
+  extraResource: [
+    'src/data',
+    'src/images',
+    'public',
+    'out/renderer/settings_window'
+  ],
+  appCategoryType: 'public.app-category.developer-tools',
+};
+
+const packagerConfig = {
+  ...commonPackagerConfig,
+  icon: isMac
+    ? path.join(__dirname, 'src', 'images', 'EDHM-UI-V3.icns')
+    : path.join(__dirname, 'src', 'images', 'Icon_v3_a0.ico'),
+  ...(isWindows ? {
     win32metadata: {
       FileDescription: 'Mod for Elite Dangerous to customize the HUD of any ship.',
       ProductName: 'EDHM-UI-V3',
       CompanyName: 'Blue Mystic',
       "requested-execution-level": "highestAvailable"
     }
-  },
-  makers: [
-    {
-      name: '@electron-forge/maker-squirrel',
-      config: {
-        name: 'EDHM-UI-V3',
-        authors: 'Blue Mystic',
-        appCopyright: 'Blue Mystic - 2025',
-        description: 'Mod for Elite Dangerous to customize the HUD of any ship.',
-        setupExe: 'edhm-ui-v3-windows-x64.exe',
+  } : {}),
+};
 
-        iconUrl: 'file:///' + path.join(__dirname, 'src', 'images', 'Icon_v3_a0.ico'),
-        setupIcon: path.join(__dirname, 'src', 'images', 'Icon_v3_a0.ico'),       //setupIcon: 'src/images/Icon_v3_a0.ico',         
-        icon: path.join(__dirname, 'src', 'images', 'Icon_v3_a0.ico'),       //icon: 'src/images/Icon_v3_a0.ico',
-        loadingGif: path.join(__dirname, 'src', 'images', 'EDHNUIv3B.gif'),
+const makers = [
+  ...(isWindows ? [{
+    name: '@electron-forge/maker-squirrel',
+    config: {
+      name: 'EDHM-UI-V3',
+      authors: 'Blue Mystic',
+      appCopyright: 'Blue Mystic - 2025',
+      description: 'Mod for Elite Dangerous to customize the HUD of any ship.',
+      setupExe: 'edhm-ui-v3-windows-x64.exe',
 
-        shortcutFolderName: 'EDHM-UI-V3',
-        shortcutName: 'EDHM-UI-V3',
-        createDesktopShortcut: true,
-        createStartMenuShortcut: true,
+      iconUrl: 'file:///' + path.join(__dirname, 'src', 'images', 'Icon_v3_a0.ico'),
+      setupIcon: path.join(__dirname, 'src', 'images', 'Icon_v3_a0.ico'),
+      icon: path.join(__dirname, 'src', 'images', 'Icon_v3_a0.ico'),
+      loadingGif: path.join(__dirname, 'src', 'images', 'EDHNUIv3B.gif'),
 
-        //certificateFile: path.join(__dirname, 'src','data','etc','EDHM-UI-V3.pfx'), // './src/data/etc/EDHM-UI-V3.pfx',
-        //certificateFile:  './src/data/etc/EDHM-UI-V3.pfx',
-        //certificatePassword:  reveal('ODo8NG1rcm9vcGRRQw==') 
-      }
-    },
-    {
-      name: '@electron-forge/maker-zip'
+      shortcutFolderName: 'EDHM-UI-V3',
+      shortcutName: 'EDHM-UI-V3',
+      createDesktopShortcut: true,
+      createStartMenuShortcut: true,
     }
-  ],
+  }] : []),
+  {
+    name: '@electron-forge/maker-zip'
+  }
+];
+
+module.exports = {
+  packagerConfig,
+  makers,
   plugins: [
     {
       name: '@electron-forge/plugin-vite',
@@ -96,14 +106,6 @@ module.exports = {
       [FuseV1Options.OnlyLoadAppFromAsar]: true
     })
   ],
-  //build: {
-  //  files: [
-  //    'dist/electron/**/*',
-  //    'dist/renderer/**/*', // Ensure this line is present and correct
-  //    'resources/**/*',
-  //    'node_modules/**/*',
-  //  ],
-  //},
 };
 
 /*  // For Linux

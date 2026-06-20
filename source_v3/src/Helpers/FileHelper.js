@@ -28,6 +28,68 @@ function getLocalAppDataPath() {
   }
 }
 
+function getAppDataRoot() {
+  return path.join(getLocalAppDataPath(), 'EDHM-UI-V3');
+}
+
+function getCacheRoot() {
+  switch (process.platform) {
+    case 'win32':
+      return path.join(getLocalAppDataPath(), 'EDHM-UI-V3', 'Cache');
+    case 'darwin':
+      return path.join(os.homedir(), 'Library', 'Caches', 'EDHM-UI-V3');
+    case 'linux':
+      return path.join(os.homedir(), '.cache', 'EDHM-UI-V3');
+    default:
+      throw new Error('Unsupported operating system');
+  }
+}
+
+function getTempRoot() {
+  return path.join(getCacheRoot(), 'Temp');
+}
+
+function getConfiguredGraphicsFolder() {
+  try {
+    const settingsPath = path.join(getAppDataRoot(), 'Settings.json');
+    if (!fs.existsSync(settingsPath)) return null;
+
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    if (!settings?.PlayerConfigFolder) return null;
+
+    return resolveEnvVariables(settings.PlayerConfigFolder);
+  } catch (error) {
+    console.warn('Unable to resolve PlayerConfigFolder from settings:', error.message);
+    return null;
+  }
+}
+
+function resolveXmlFilePath(filePath) {
+  const resolvedPath = resolveEnvVariables(filePath);
+  if (fs.existsSync(resolvedPath)) {
+    return resolvedPath;
+  }
+
+  const basename = path.basename(resolvedPath);
+  const graphicsConfigFiles = new Set([
+    'GraphicsConfiguration.xml',
+    'GraphicsConfigurationOverride.xml'
+  ]);
+
+  if (graphicsConfigFiles.has(basename)) {
+    const graphicsFolder = getConfiguredGraphicsFolder();
+    if (graphicsFolder) {
+      const candidate = path.join(graphicsFolder, basename);
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+      return candidate;
+    }
+  }
+
+  return resolvedPath;
+}
+
 /** Resolves environment variables in a given path string.
  * @param {string} inputPath The path string containing environment variables.
  * @returns {string} The resolved path, or the original path if no replacements were made. */
@@ -47,6 +109,9 @@ const resolveEnvVariables = (inputPath) => {
       '%USERPROFILE%': os.homedir(),
       '%APPDATA%': app.getPath('userData'),
       '%LOCALAPPDATA%': getLocalAppDataPath(),
+      '%EDHM_APPDATA%': getAppDataRoot(),
+      '%EDHM_CACHEDATA%': getCacheRoot(),
+      '%EDHM_TEMPDATA%': getTempRoot(),
       '%PROGRAMFILES%': process.env.PROGRAMFILES || process.env['ProgramFiles'],
       '%PROGRAMFILES(X86)%': process.env['PROGRAMFILES(X86)'] || process.env['ProgramFiles(x86)'],
       '%PROGRAMDATA%': process.env.PROGRAMDATA,
@@ -871,7 +936,8 @@ async function decompressFile(zipPath, outputDir) {
 
 ipcMain.handle('read-xml-file', async (event, filePath) => {
   try {
-    const xmlString = fs.readFileSync(filePath, 'utf-8');
+    const resolvedXmlPath = resolveXmlFilePath(filePath);
+    const xmlString = fs.readFileSync(resolvedXmlPath, 'utf-8');
     return xmlString;
   } catch (error) {
     console.error('Error reading XML file:', error);
@@ -881,8 +947,9 @@ ipcMain.handle('read-xml-file', async (event, filePath) => {
 
 ipcMain.handle('write-xml-file', async (event, filePath, xmlContent) => {
   try {
-    fs.writeFileSync(filePath, xmlContent, 'utf-8');
-    console.log('XML file written successfully:', filePath);
+    const resolvedXmlPath = resolveXmlFilePath(filePath);
+    fs.writeFileSync(resolvedXmlPath, xmlContent, 'utf-8');
+    console.log('XML file written successfully:', resolvedXmlPath);
     return true;
   } catch (error) {
     console.error('Error writing XML file:', error);
@@ -1931,6 +1998,8 @@ ipcMain.handle('updateFileDates', (event, FilePath) => {
 
 export default {
   getAssetPath, getAssetUrl,
+  getAppDataRoot, getCacheRoot, getTempRoot,
+  getConfiguredGraphicsFolder, resolveXmlFilePath,
   resolveEnvVariables,
 
   loadJsonFile,  writeJsonFile,

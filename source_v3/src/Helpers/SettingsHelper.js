@@ -15,7 +15,7 @@ import Util from './Utils.js';
 let programSettings = null; // Holds the Program Settings in memory
 
 const defaultSettingsPath = fileHelper.getAssetPath('data/Settings.json');
-var programSettingsPath = fileHelper.resolveEnvVariables('%USERPROFILE%\\EDHM_UI\\Settings.json');
+var programSettingsPath = path.join(fileHelper.getAppDataRoot(), 'Settings.json');
 const InstallationStatus = {
   NEW_SETTINGS: 'newSettings',
   UPGRADING_USER: 'upgradingUser',
@@ -35,15 +35,14 @@ export const initializeSettings = async () => {
     console.log('Initializing Settings...Main');
 
     // Resolve the path to the primary settings file stored in LOCALAPPDATA
-    const primaryPath = fileHelper.resolveEnvVariables(
-      path.join('%LOCALAPPDATA%\\EDHM-UI-V3', 'Settings.json')
-    ); //console.log('primaryPath', primaryPath);
+    const primaryPath = path.join(fileHelper.getAppDataRoot(), 'Settings.json'); //console.log('primaryPath', primaryPath);
 
     // If the primary settings file exists, load it and determine the actual program settings path
     if (fileHelper.checkFileExists(primaryPath)) {
       const PrimarySettings = await fileHelper.loadJsonFile(primaryPath); console.log('PrimarySettings', PrimarySettings);
+      const configuredUserDataFolder = PrimarySettings.UserDataFolder || PrimarySettings.DataFolder || fileHelper.getAppDataRoot();
       programSettingsPath = path.join(
-        fileHelper.resolveEnvVariables(PrimarySettings.DataFolder),
+        fileHelper.resolveEnvVariables(configuredUserDataFolder),
         'Settings.json'
       );
     };
@@ -441,7 +440,7 @@ const getInstanceByName = (InstanceFullName) => {
 function GetInstanceDataDirectory(instanceKey) {
   try {
     const ProgramDataPath = fileHelper.resolveEnvVariables(
-      readSetting('UserDataFolder', '%USERPROFILE%\\EDHM_UI') );
+      readSetting('UserDataFolder', fileHelper.getAppDataRoot()) );
     const GameType = instanceKey === 'ED_Odissey' ? 'ODYSS' : 'HORIZ';
     return path.join(ProgramDataPath, GameType);
   } catch (error) {
@@ -689,7 +688,7 @@ async function UninstallEDHMmod(gameInstance) {
     }
 
     // Also delete the files from the extra path:
-    fileHelper.deleteFolderRecursive(fileHelper.resolveEnvVariables('%USERPROFILE%\\EDHM_UI\\ODYSS\\EDHM'));
+    fileHelper.deleteFolderRecursive(path.join(fileHelper.getAppDataRoot(), 'ODYSS', 'EDHM'));
 
   } catch (error) {
     console.error('Error during uninstallation:', error);
@@ -711,7 +710,7 @@ async function DoHotFix() {
       const hotFix = fileHelper.loadJsonFile(hotfixJsonPath);
       if (hotFix) {
         console.log('------ Applying HotFixes --------');
-        const AppExePath = fileHelper.resolveEnvVariables('%LOCALAPPDATA%\\EDHM-UI-V3');
+        const AppExePath = fileHelper.getAppDataRoot();
         const UI_DOCUMENTS = programSettings.UserDataFolder; // fileHelper.resolveEnvVariables('%USERPROFILE%\\EDHM_UI');
         const GameInstances = readSetting('GameInstances');
 
@@ -922,7 +921,7 @@ async function ApplyTheme(themeName) {
 ipcMain.handle('GetAppDataDirectory', (event) => {
   try {
     return fileHelper.resolveEnvVariables(
-      readSetting('UserDataFolder', '%USERPROFILE%\\EDHM_UI')
+      readSetting('UserDataFolder', fileHelper.getAppDataRoot())
     );
   } catch (error) {
     throw new Error(error.message + error.stack);

@@ -93,21 +93,6 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="row">
-                                        <div class="col">
-                                            <label for="customIconPath">Custom Icon:</label>
-                                            <div id="customIconPath" class="input-group mb-3" disabled>
-                                                <input type="text" class="form-control form-control-sm"
-                                                    placeholder="Pick a Location" aria-label="Pick a Location"
-                                                    aria-describedby="button-addon4" v-model="config.CustomIcon">
-                                                <button class="btn btn-outline-secondary" type="button"
-                                                    id="button-addon4" @click="browseCustomIcon">Browse</button>
-                                            </div>
-                                        </div>
-                                        <div class="col">
-                                            <img :src="config.CustomIcon" class="img-thumbnail" alt="..." width="64" height="64">
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -154,9 +139,6 @@ export default {
         async Initialize() {
             try {
                 if (this.config) {
-                    if (!this.config.CustomIcon) {
-                        this.config.CustomIcon = await window.api.getAssetPath('images/Icon_v3_a0.ico');
-                    }
                     this.DATA_DIRECTORY = await window.api.resolveEnvVariables(this.config.UserDataFolder); //console.log('DATA_DIRECTORY:', DATA_DIRECTORY);
 
                     const instanceName = this.config.ActiveInstance; //<- "Steam (Odyssey (Live))"
@@ -187,9 +169,6 @@ export default {
                 // FRESH INSTALL:
                 this.config = await window.api.getDefaultSettings();
                 this.Initialize();
-                setTimeout(() => {
-                    EventBus.emit('RoastMe', { type: 'Info', message: 'You can do it manually in the Game Instances..<br> or just click the Green Button.', delay: 10000 });    
-                }, 2000);
             }
             //console.log(this.config);        
         },
@@ -368,23 +347,6 @@ export default {
             }
         },
         
-        /* Browse for the location of a Custom Icon for the App */
-        async browseCustomIcon() {
-            //const DefaultLocation = await window.api.getAssetPath('images/Icon_v3_a0.ico');
-            const DATA_DIRECTORY = await window.api.resolveEnvVariables(this.config.UserDataFolder); //console.log('DATA_DIRECTORY:', DATA_DIRECTORY);
-            const DefaultLocation = window.api.joinPath(DATA_DIRECTORY, 'images');//console.log('DefaultLocation:', DefaultLocation);
-            const options = {
-                title: 'Select a Custom Icon',
-                defaultPath: DefaultLocation,
-                properties: ['openFile', 'showHiddenFiles', 'createDirectory', 'dontAddToRecent'],
-                message: 'Select a Custom Icon',
-            };
-            const filePath = await window.api.ShowOpenDialog(options);
-            if (filePath) {
-                this.config.CustomIcon = filePath[0];
-            }
-        },
-
         /* Cleans html tags */
         sanitizeId(id) {
             return id.replace(/\s/g, '');
@@ -397,14 +359,11 @@ export default {
 
         /* Attempts to Detect the running Game Process and then sets the Paths */
         async runGameLocationAssistant() {
-            EventBus.emit('RoastMe', { type: 'Info', message: 'Waiting for Game to Start...<br>Leave the game running at menus and return here.' });
-
             // 1. Check if the Game is already Running:
             const fullPath = await window.api.detectProgram('EliteDangerous64.exe');
 
             if (fullPath) {
                 console.log('Process found at:', fullPath);
-                EventBus.emit('RoastMe', { type: 'Success', message: `Process found!<br>Game will now Close<br>Don't Panic..` });
 
                 await window.api.terminateProgram('EliteDangerous64.exe');
                 const FolderPath = await window.api.getParentFolder(fullPath);
@@ -420,14 +379,12 @@ export default {
                 
             } else {
                 console.log('Process not found.');
-                EventBus.emit('RoastMe', { type: 'Info', message: 'Waiting for Game to Start...<br>Leave the game running at menus and return here.' });
 
                 window.api.startMonitoring('EliteDangerous64.exe');
                 
                 // Event listener for program detection
                 window.api.onProgramDetected(async (event, exePath) => {
                     console.log(`Executable Path: ${exePath}`);
-                    EventBus.emit('RoastMe', { type: 'Success', message: `Process found!<br>Game will now Close<br>Don't Panic..` });
 
                     await window.api.terminateProgram('EliteDangerous64.exe');
                     const FolderPath = await window.api.getParentFolder(exePath);

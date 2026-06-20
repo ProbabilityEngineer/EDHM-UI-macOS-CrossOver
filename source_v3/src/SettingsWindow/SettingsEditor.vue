@@ -83,6 +83,21 @@
                                     </button>
                                 </div>
                             </div>
+                            <div class="col">
+                                <label for="playerConfigFolder">Elite Config XML Folder:</label>
+                                <div id="playerConfigFolder" class="input-group mb-3">
+                                    <input type="text" class="form-control form-control-sm"
+                                        placeholder="Pick the folder containing GraphicsConfiguration*.xml" aria-label="Pick a Location"
+                                        aria-describedby="button-addon-config" v-model="config.PlayerConfigFolder" />
+                                    <button class="btn btn-outline-secondary" type="button" id="button-addon-config"
+                                        @click="browseConfigFolder">
+                                        Browse
+                                    </button>
+                                </div>
+                                <div class="form-text text-light opacity-75">
+                                    Windows default: %USERPROFILE%\\AppData\\Local\\Frontier Developments\\Elite Dangerous\\Options\\Graphics
+                                </div>
+                            </div>
                         </div>
 
                         <div class="row">
@@ -397,7 +412,7 @@ export default {
                     { name: 'Game Executable', extensions: ['exe'] }
                 ],
                 properties: ['openFile', 'showHiddenFiles', 'dontAddToRecent'],
-                message: 'Select the Game Executable',
+                message: 'Select the EliteDangerous64.exe location. On mac/CrossOver this is inside the bottle drive_c path.',
             };
 
             const filePath = await window.api.ShowOpenDialog(options);
@@ -408,6 +423,12 @@ export default {
                 this.selectedGamePath = parentFolder;
 
                 this.OnGamePathChange(null); // Trigger the change event to update the config
+                if (!this.config.PlayerJournal) {
+                    await this.browseJournalFolder();
+                }
+                if (!this.config.PlayerConfigFolder) {
+                    await this.browseConfigFolder();
+                }
 
             } else {
                 console.log('[GamePath] No file selected.');
@@ -428,7 +449,7 @@ export default {
                     this.config.UserDataFolder = filePath[0];
                     if (DATA_DIRECTORY != this.config.UserDataFolder) {
                         const PrimeSettings = { DataFolder: this.config.UserDataFolder };
-                        const primaryPath = await window.api.resolveEnvVariables('%LOCALAPPDATA%\\EDHM-UI-V3');
+                        const primaryPath = await window.api.resolveEnvVariables('%EDHM_APPDATA%');
                         await window.api.ensureDirectoryExists(primaryPath);
                         await window.api.writeJsonFile(window.api.joinPath(primaryPath, 'Settings.json'), PrimeSettings, true);
                         await window.api.copyDirectory(DATA_DIRECTORY, this.config.UserDataFolder);
@@ -454,12 +475,29 @@ export default {
                 title: 'Select Where Game Stores Journal Files',
                 defaultPath: defaultLocation,
                 properties: ['openDirectory', 'createDirectory', 'promptToCreate', 'dontAddToRecent'],
-                message: 'Select Where Game Stores Journal Files',
+                message: 'Select the folder containing Journal.*.log files',
                 filters: null // No specific filters for directories
             };
             const filePath = await window.api.ShowOpenDialog(options);
             if (filePath) {
                 this.config.PlayerJournal = filePath[0];
+            }
+        },
+        async browseConfigFolder() {
+            var defaultLocation = this.config.PlayerConfigFolder ? this.config.PlayerConfigFolder :
+                '%USERPROFILE%\\AppData\\Local\\Frontier Developments\\Elite Dangerous\\Options\\Graphics';
+            defaultLocation = await window.api.resolveEnvVariables(defaultLocation);
+
+            const options = {
+                title: 'Select Elite Config XML Folder',
+                defaultPath: defaultLocation,
+                properties: ['openDirectory', 'createDirectory', 'promptToCreate', 'dontAddToRecent'],
+                message: 'Select the folder containing GraphicsConfiguration.xml and/or GraphicsConfigurationOverride.xml\nWindows default: %USERPROFILE%\\AppData\\Local\\Frontier Developments\\Elite Dangerous\\Options\\Graphics',
+                filters: null
+            };
+            const filePath = await window.api.ShowOpenDialog(options);
+            if (filePath) {
+                this.config.PlayerConfigFolder = filePath[0];
             }
         },
 
@@ -492,14 +530,11 @@ export default {
 
         /* Attempts to Detect the running Game Process and then sets the Paths */
         async runGameLocationAssistant() {
-            window.api.events.sendEvent('RoastMe', { type: 'Info', message: 'Waiting for Game to Start...<br>Leave the game running at menus and return here.', delay: 10000, autoHide: false });
-
             // 1. Check if the Game is already Running:
             const fullPath = await window.api.detectProgram('EliteDangerous64.exe');
 
             if (fullPath) {
                 console.log('Process found at:', fullPath);
-                window.api.events.sendEvent('RoastMe', { type: 'Success', message: `Process found!<br>Game will now Close<br>Don't Panic..` });
 
                 await window.api.terminateProgram('EliteDangerous64.exe');
                 const FolderPath = await window.api.getParentFolder(fullPath);
@@ -515,14 +550,12 @@ export default {
 
             } else {
                 console.log('Process not found.');
-                window.api.events.sendEvent('RoastMe', { type: 'Info', message: 'Waiting for Game to Start...<br>Leave the game running at menus and return here.' });
 
                 window.api.startMonitoring('EliteDangerous64.exe');
 
                 // Event listener for program detection
                 window.api.onProgramDetected(async (event, exePath) => {
                     console.log(`Executable Path: ${exePath}`);
-                    window.api.events.sendEvent('RoastMe', { type: 'Success', message: `Process found!<br>Game will now Close<br>Don't Panic..` });
 
                     await window.api.terminateProgram('EliteDangerous64.exe');
                     const FolderPath = await window.api.getParentFolder(exePath);
@@ -576,9 +609,6 @@ export default {
                 // FRESH INSTALL:
                 this.config = await window.api.getDefaultSettings();
                 this.Initialize();
-                setTimeout(() => {
-                    window.api.events.sendEvent('RoastMe', { type: 'Info', message: 'You can do it manually in the Game Instances..<br> or just click the Green Button.', delay: 10000 });
-                }, 2000);
             }
             
             if (typeof this.config.UiScaleFactor === 'undefined') {
