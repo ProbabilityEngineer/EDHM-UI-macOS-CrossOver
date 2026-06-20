@@ -63,3 +63,11 @@ Removed legacy Custom Icon UI/code from the in-app settings modal (src/MainWindo
 **2026-06-20T07:37:31Z**
 
 Beginning repo workflow hardening follow-up: refine repo AGENTS.md, then align/publish the current jj change, and reconfigure remotes into a fork-style setup so upstream remains the original BlueMystical repo while origin can point to the user's fork.
+
+**2026-06-20T07:39:38Z**
+
+Refined repo-local AGENTS.md with stronger EDHM-specific guidance for source_v3 focus, jj-first workflow, ticket/turnlog usage, fork-style remote expectations, and mac/CrossOver packaging notes. Also initialized jj local identity and added upstream as an explicit Git remote alias. Publishing is currently blocked because the authenticated GitHub account (ProbabilityEngineer) does not yet appear to have a fork at github.com/ProbabilityEngineer/EDHM_UI.
+
+**2026-06-20T07:42:16Z**
+
+Fork now exists at github.com/ProbabilityEngineer/EDHM_UI. Repointing origin to the fork, keeping upstream on BlueMystical, and aligning/publishing the current jj workflow setup changes.
