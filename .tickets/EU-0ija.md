@@ -59,3 +59,7 @@ Removed the non-useful blue/green toast guidance from the settings dialog on mac
 **2026-06-20T07:33:03Z**
 
 Removed legacy Custom Icon UI/code from the in-app settings modal (src/MainWindow/SettingsEditor.vue) and stripped the non-useful green/blue RoastMe notifications from that modal's first-run and game localization assistant flow. This addresses the remaining popups the user was seeing in the packaged app.
+
+**2026-06-20T07:37:31Z**
+
+Beginning repo workflow hardening follow-up: refine repo AGENTS.md, then align/publish the current jj change, and reconfigure remotes into a fork-style setup so upstream remains the original BlueMystical repo while origin can point to the user's fork.
