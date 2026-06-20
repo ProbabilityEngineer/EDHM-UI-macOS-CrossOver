@@ -211,3 +211,11 @@ Integrated CrossOver DLL override handling into the app: Install EDHM now sets d
 **2026-06-20T14:53:18Z**
 
 Rearranged settings layout: Player Journal, Bottle Root, and Graphics Config XML Folder now each use their own full-width line where available; DLL override action moved to its own small button below Bottle Root; removed the printed Windows default Graphics XML path hint; Number of Themes to Save is now a compact numeric input with spinner controls and range 1-999. Rebuilt successfully.
+
+**2026-06-20T14:53:57Z**
+
+User reported Shipyard main menu appears to work, but selecting the download/export arrow button shows red error box: 'No shipyard-v2 file found'. Need inspect ShipyardUI/import/export action routing and make missing legacy v2 import a non-error/no-op or clarify button behavior.
+
+**2026-06-20T14:55:09Z**
+
+Fixed Shipyard legacy import button behavior: missing V2 shipyard file is now an informational no-op/status message instead of a red error, and the UI only reloads/claims import success when a legacy file was actually imported. Rebuilt successfully.

@@ -334,10 +334,12 @@ export default {
             EventBus.emit('shypyard-load-ships', null);
             this.loadShipData(this.themes);
         },
-         cmdImportFromV2_Click(e) {
-            this.ImportShipyardV2(); // Call the method to import ships from V2
-            this.loadShipData(this.themes);
-            this.statusText = 'Ships imported from V2.';
+         async cmdImportFromV2_Click(e) {
+            const imported = await this.ImportShipyardV2(); // Call the method to import ships from V2
+            if (imported) {
+                await this.loadShipData(this.themes);
+                this.statusText = 'Ships imported from V2.';
+            }
         },
         async cmdDeleteShip_Click(e) {
             if (this.selectedShip) {
@@ -422,14 +424,18 @@ export default {
 
                         EventBus.emit('RoastMe', { type: 'Success', message: 'Shipyard V2 Imported Successfully!' });
                     }
+                    return true;
                 } else {
                     console.log('No Shipyard V2 file found at:', v2ShipyardFile);
-                    EventBus.emit('RoastMe', { type: 'Error', message: 'No Shipyard V2 file found!' });
+                    this.statusText = 'No legacy Shipyard V2 data found.';
+                    EventBus.emit('RoastMe', { type: 'Info', message: 'No legacy Shipyard V2 data found to import.' });
+                    return false;
                 }
 
             } catch (error) {
                 console.log('Error @ImportShipyardV2():', error);
                 EventBus.emit('ShowError', error);
+                return false;
             }
         },
 
