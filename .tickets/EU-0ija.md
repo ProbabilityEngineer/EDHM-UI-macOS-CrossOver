@@ -71,3 +71,15 @@ Refined repo-local AGENTS.md with stronger EDHM-specific guidance for source_v3 
 **2026-06-20T07:42:16Z**
 
 Fork now exists at github.com/ProbabilityEngineer/EDHM_UI. Repointing origin to the fork, keeping upstream on BlueMystical, and aligning/publishing the current jj workflow setup changes.
+
+**2026-06-20T07:47:10Z**
+
+Reworked the fork layout for easier upstream sync. Instead of carrying the mac/workflow changes directly on main, created a dedicated feature branch/bookmark `macos-crossover-poc` at the current work, then moved fork `main` back to match upstream `main` (v3.0.66). Pushed both so origin/main now mirrors upstream and origin/macos-crossover-poc holds the ongoing mac port work.
+
+**2026-06-20T07:49:22Z**
+
+Extended AGENTS.md with an explicit fork/upstream sync workflow: keep main aligned with upstream/main, keep ongoing mac work on macos-crossover-poc, and refresh by fetching upstream, moving main to upstream/main, rebasing the feature branch, then pushing both to the fork.
+
+**2026-06-20T07:50:37Z**
+
+Finalizing the latest workflow cleanup: committing the AGENTS upstream-sync guidance and matching ticket note updates onto macos-crossover-poc, then pushing the feature branch with an empty jj working copy on top.

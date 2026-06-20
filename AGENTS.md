@@ -53,9 +53,16 @@ These instructions apply to the entire `EDHM_UI` repo.
 ## Remote layout
 
 - Treat this repo as a fork-style checkout.
-- `upstream` should refer to the original BlueMystical repository.
-- `origin` should refer to the user's fork when available.
+- `upstream` refers to the original BlueMystical repository.
+- `origin` refers to the user's fork.
 - Avoid pushing directly to upstream unless the user explicitly asks for it.
+- Keep `main` aligned with `upstream/main` whenever practical.
+- Keep ongoing mac port work on `macos-crossover-poc` or a similarly named feature branch/bookmark rather than directly on `main`.
+- Preferred upstream sync flow:
+  1. fetch upstream
+  2. move local/fork `main` to `upstream/main`
+  3. rebase `macos-crossover-poc` onto the refreshed `main`
+  4. push `main` and the feature branch/bookmark to the fork
 
 ## Shell
 
