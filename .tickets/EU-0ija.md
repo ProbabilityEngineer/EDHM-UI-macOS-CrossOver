@@ -235,3 +235,7 @@ Reduced startup preview flash: App no longer emits InitializeHUDimage immediatel
 **2026-06-20T15:51:02Z**
 
 Suppressed misleading startup update prompt on macOS: AnalyseUpdate now checks platform before showing the download dialog and returns silently for non-Windows/Linux when upstream has an update but no supported updater artifact. Rebuilt successfully.
+
+**2026-06-20T16:08:10Z**
+
+Packaged and published experimental macOS/CrossOver PoC release to GitHub: https://github.com/ProbabilityEngineer/EDHM_UI/releases/tag/macos-crossover-poc-2026-06-20. Artifact: EDHM-UI-V3-macos-crossover-poc-darwin-arm64.zip, built from macos-crossover-poc at d9f67e9e after Node 22 Forge package validation.
