@@ -590,6 +590,34 @@ async function installModArchive(edhmZipFile, gamePath, edhmIniTarget, shaderFix
   }
 }
 
+function getSymlinkAwareDirectoryTarget(folderPath) {
+  if (fs.existsSync(folderPath)) {
+    return fs.realpathSync(folderPath);
+  }
+  return fileHelper.ensureDirectoryExists(folderPath);
+}
+
+async function installTPModArchive(modZipFile, gamePath) {
+  if (process.platform !== 'darwin') {
+    return fileHelper.decompressFile(modZipFile, gamePath);
+  }
+
+  const edhmIniTarget = getSymlinkAwareDirectoryTarget(path.join(gamePath, 'EDHM-ini'));
+  const shaderFixesTarget = getSymlinkAwareDirectoryTarget(path.join(gamePath, 'ShaderFixes'));
+  const tempExtractRoot = fileHelper.ensureDirectoryExists(
+    path.join(fileHelper.getTempRoot(), `edhm-tpmod-extract-${Date.now()}`)
+  );
+
+  try {
+    await fileHelper.decompressFile(modZipFile, tempExtractRoot);
+    const stats = await copyExtractedModFiles(tempExtractRoot, gamePath, edhmIniTarget, shaderFixesTarget);
+    console.log(`Installed extracted TPMod files: ${stats.files} files, ${stats.directories} directories`);
+    return { success: true, ...stats };
+  } finally {
+    fs.rmSync(tempExtractRoot, { recursive: true, force: true });
+  }
+}
+
 const EDHM_CROSSOVER_DLL_OVERRIDES = {
   d3d11: 'native,builtin',
   d3dcompiler_47: 'native,builtin',
@@ -1246,6 +1274,13 @@ ipcMain.handle('installEDHMmod', (event, gameInstance) => {
     throw new Error(error.message + error.stack);
   }
 });
+ipcMain.handle('installTPModArchive', (event, modZipFile, gamePath) => {
+  try {
+    return installTPModArchive(modZipFile, gamePath);
+  } catch (error) {
+    throw new Error(error.message + error.stack);
+  }
+});
 ipcMain.handle('setCrossOverDllOverrides', (event, bottleRoot) => {
   try {
     return setCrossOverDllOverrides(bottleRoot);
@@ -1303,7 +1338,7 @@ ipcMain.handle('DoHotFix', async (event) => {
 
 export default { 
   initializeSettings, loadSettings, saveSettings, 
-  installEDHMmod, CheckEDHMinstalled, setCrossOverDllOverrides,
+  installEDHMmod, CheckEDHMinstalled, setCrossOverDllOverrides, installTPModArchive,
   getInstanceByName, getActiveInstance, getActiveInstanceEx,
   GetInstanceDataDirectory,
   LoadGlobalSettings, saveGlobalSettings,

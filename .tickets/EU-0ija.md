@@ -219,3 +219,11 @@ User reported Shipyard main menu appears to work, but selecting the download/exp
 **2026-06-20T14:55:09Z**
 
 Fixed Shipyard legacy import button behavior: missing V2 shipyard file is now an informational no-op/status message instead of a red error, and the UI only reloads/claims import success when a legacy file was actually imported. Rebuilt successfully.
+
+**2026-06-20T15:28:18Z**
+
+User hit 3PMod install failure for ED-GT GraphicTweaks on mac/CrossOver: TPMods download uses decompress-file directly into game path; ditto refuses EDHM-ini symlink path with 'Not a directory' and 'Unknown compression type'. Need mirror EDHM install strategy: extract 3PMod zip to temp on darwin and copy EDHM-ini/ShaderFixes contents into symlink targets rather than extracting through symlinks.
+
+**2026-06-20T15:29:42Z**
+
+Fixed mac/CrossOver 3PMod install extraction: TPMods now call a new installTPModArchive IPC instead of decompressing directly into the game path. On darwin, the helper extracts zip to temp then copies EDHM-ini/ShaderFixes contents into their symlink targets, avoiding ditto 'EDHM-ini: Not a directory' errors. Rebuilt successfully.

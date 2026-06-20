@@ -694,8 +694,9 @@ export default {
                     const folderPath = filePath[0];
                     const gamePath = this.ActiveInstance.path;
 
-                    //- Unzip the file:
-                    await window.api.decompressFile(folderPath, gamePath);
+                    //- Install the TPMod archive. On mac this extracts to temp first so zip entries
+                    //- under EDHM-ini/ShaderFixes are copied into symlink targets instead of through symlinks.
+                    await window.api.installTPModArchive(folderPath, gamePath);
                     await this.Initialize(); //<- Re-load the mods list
                     this.statusText = 'Mod Installed.';
                 }
@@ -857,8 +858,9 @@ export default {
                 //- Some Cleanup:
                 window.api.removeDownloadProgressListener(this.progressListener);
 
-                //- Unzip the file:
-                await window.api.decompressFile(filePath, Options.game_path);
+                //- Install the TPMod archive. On mac this extracts to temp first so zip entries
+                //- under EDHM-ini/ShaderFixes are copied into symlink targets instead of through symlinks.
+                await window.api.installTPModArchive(filePath, Options.game_path);
                 await this.Initialize(); //<- Re-load the mods list
                 this.showSpinner = false;
                 this.showProgressBar = false;
