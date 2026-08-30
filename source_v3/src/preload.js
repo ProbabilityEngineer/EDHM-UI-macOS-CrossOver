@@ -162,6 +162,8 @@ contextBridge.exposeInMainWorld('api', {
   setCrossOverDllOverrides: (bottleRoot) => ipcRenderer.invoke('setCrossOverDllOverrides', bottleRoot),
   CheckEDHMinstalled: (gamePath) => ipcRenderer.invoke('CheckEDHMinstalled', gamePath),
   UninstallEDHMmod: (gameInstance) => ipcRenderer.invoke('UninstallEDHMmod', gameInstance),
+  GetEDHMStatus: (gameInstance) => ipcRenderer.invoke('GetEDHMStatus', gameInstance),
+  ToggleEDHMmod: (gameInstance) => ipcRenderer.invoke('ToggleEDHMmod', gameInstance),
   DisableEDHMmod: (gameInstance) => ipcRenderer.invoke('DisableEDHMmod', gameInstance),
   DoHotFix: async () => ipcRenderer.invoke('DoHotFix'),
 

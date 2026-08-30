@@ -1,7 +1,7 @@
 import { app, Menu, BrowserWindow, globalShortcut, ipcMain, shell, Tray, screen  } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import started from 'electron-squirrel-startup';
 import fileHelper from './Helpers/FileHelper.js';
 import themeHelper from './Helpers/ThemeHelper.js';
@@ -67,6 +67,27 @@ if (!gotTheLock) {
   Start();
 }
 
+function isWindowsWineLikeRuntime() {
+  if (process.platform !== 'win32') return false;
+
+  const wineEnvHints = ['WINEPREFIX', 'WINELOADER', 'WINELOADERNOEXEC', 'CX_BOTTLE', 'CX_ROOT'];
+  if (wineEnvHints.some(name => !!process.env[name])) {
+    return true;
+  }
+
+  try {
+    execSync('reg query "HKCU\\Software\\Wine"', { stdio: 'ignore' });
+    return true;
+  } catch {}
+
+  try {
+    execSync('reg query "HKLM\\Software\\Wine"', { stdio: 'ignore' });
+    return true;
+  } catch {}
+
+  return false;
+}
+
 async function Start() {
   try {
     programSettings = await settingsHelper.initializeSettings();
@@ -77,14 +98,23 @@ async function Start() {
 
     //#region Graphic Options
 
-    //- Rendering Backend: Vulkan / OpenGL / Direct3D:
-    const GpuRenderer = settingsHelper.readSetting('GpuRenderer', 'Vulkan');
-    switch (GpuRenderer) {
-      case 'Vulkan': app.commandLine.appendSwitch('use-vulkan'); break; // Force Vulkan
-      case 'OpenGL': app.commandLine.appendSwitch('use-angle', 'gl'); break; // Force ANGLE with OpenGL
-      case 'Direct3D': app.commandLine.appendSwitch('use-angle', 'd3d11'); break; // Force ANGLE with Direct3D 11
-      default:
-        app.commandLine.appendSwitch('use-vulkan'); break;
+    const isWineRuntime = isWindowsWineLikeRuntime();
+    if (isWineRuntime) {
+      console.log('Detected Wine/CrossOver runtime. Forcing SwiftShader WebGL fallback flags.');
+      app.commandLine.appendSwitch('use-angle', 'swiftshader');
+      app.commandLine.appendSwitch('enable-unsafe-swiftshader');
+      app.commandLine.appendSwitch('in-process-gpu');
+      app.commandLine.appendSwitch('no-sandbox');
+    } else {
+      //- Rendering Backend: Vulkan / OpenGL / Direct3D:
+      const GpuRenderer = settingsHelper.readSetting('GpuRenderer', 'Vulkan');
+      switch (GpuRenderer) {
+        case 'Vulkan': app.commandLine.appendSwitch('use-vulkan'); break; // Force Vulkan
+        case 'OpenGL': app.commandLine.appendSwitch('use-angle', 'gl'); break; // Force ANGLE with OpenGL
+        case 'Direct3D': app.commandLine.appendSwitch('use-angle', 'd3d11'); break; // Force ANGLE with Direct3D 11
+        default:
+          app.commandLine.appendSwitch('use-vulkan'); break;
+      }
     }
 
     // Desactiva solo la composición por GPU (no toda la aceleración)
@@ -93,7 +123,7 @@ async function Start() {
       app.commandLine.appendSwitch('disable-gpu-compositing');
     }
     const GpuAcceleration = settingsHelper.readSetting('GpuAcceleration', true);
-    if (!GpuAcceleration) {
+    if (!GpuAcceleration && !isWineRuntime) {
       app.commandLine.appendSwitch('disable-gpu');
     }
     //- Hardware-Accelerated Video Decoding
@@ -108,7 +138,7 @@ async function Start() {
     }
     //- Enable WebGL” / “Enable WebGL2
     const GpuUseWebGL = settingsHelper.readSetting('GpuUseWebGL', true);
-    if (!GpuUseWebGL) {
+    if (!GpuUseWebGL && !isWineRuntime) {
       app.commandLine.appendSwitch('disable-webgl');
       app.commandLine.appendSwitch('disable-webgl2');
     }

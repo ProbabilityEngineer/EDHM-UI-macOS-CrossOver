@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import fs from 'fs';
 import { readdir, stat } from 'fs/promises';
-import { writeFile, unlink, access } from 'node:fs/promises';
+import { writeFile, unlink, access, rename } from 'node:fs/promises';
 
 import fileHelper from './FileHelper';
 import themeHelper from './ThemeHelper.js';
@@ -16,6 +16,21 @@ let programSettings = null; // Holds the Program Settings in memory
 
 const defaultSettingsPath = fileHelper.getAssetPath('data/Settings.json');
 var programSettingsPath = path.join(fileHelper.getAppDataRoot(), 'Settings.json');
+const EDHM_DLL_FILES = [
+  { enabled: 'd3d11.dll', disabled: 'd3d11.dll.disabled' },
+  { enabled: 'd3dcompiler_47.dll', disabled: 'd3dcompiler_47.dll.disabled' },
+];
+
+const fileExists = async (filePath) => {
+  try {
+    await access(filePath);
+    return true;
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    throw error;
+  }
+};
+
 const InstallationStatus = {
   NEW_SETTINGS: 'newSettings',
   UPGRADING_USER: 'upgradingUser',
@@ -779,6 +794,15 @@ async function installEDHMmod(gameInstance) {
       const versionMatch = edhmZipFile.match(/v\d+\.\d+/); 
 
       const _ret = await installModArchive(edhmZipFile, unzipGamePath, edhmSymLinkTarget, shaderSymLinkTarget);
+      const installedPair = await Promise.all(
+        EDHM_DLL_FILES.map(({ enabled }) => fileExists(path.join(gamePath, enabled)))
+      );
+      if (_ret && installedPair.every(Boolean)) {
+        for (const { disabled } of EDHM_DLL_FILES) {
+          const disabledPath = path.join(gamePath, disabled);
+          if (await fileExists(disabledPath)) await unlink(disabledPath);
+        }
+      }
 
       Response.game = GameType;
       Response.version = versionMatch[0];
@@ -871,6 +895,8 @@ async function UninstallEDHMmod(gameInstance) {
       'd3d11.dll',
       'd3dcompiler_46.dll',
       'd3dcompiler_47.dll',
+      'd3dcompiler_47.dll.disabled',
+      'd3d11.dll.disabled',
       'nvapi64.dll',
       'EDHM-Uninstall.bat',
     ];
@@ -900,8 +926,64 @@ async function UninstallEDHMmod(gameInstance) {
   return fileDeleted;
 };
 
-async function DisableEDHMmod(gameInstance) {
-  throw new Error("Not implemented yet!");  
+/** Return EDHM's enabled, disabled, or not-installed state. */
+async function GetEDHMStatus(gameInstance) {
+  const configuredPath = Array.isArray(gameInstance?.path) ? gameInstance.path[0] : gameInstance?.path;
+  if (!configuredPath) return { state: 'not_installed', conflict: false };
+
+  const gamePath = path.resolve(fileHelper.resolveEnvVariables(configuredPath));
+  const states = await Promise.all(EDHM_DLL_FILES.map(async ({ enabled, disabled }) => ({
+    enabledExists: await fileExists(path.join(gamePath, enabled)),
+    disabledExists: await fileExists(path.join(gamePath, disabled)),
+  })));
+  const anyDll = states.some(state => state.enabledExists || state.disabledExists);
+  if (!anyDll) return { state: 'not_installed', conflict: false, gamePath };
+
+  const hasDuplicate = states.some(state => state.enabledExists && state.disabledExists);
+  const hasMissing = states.some(state => !state.enabledExists && !state.disabledExists);
+  const anyDisabled = states.some(state => state.disabledExists);
+  if (hasDuplicate || hasMissing) {
+    return { state: anyDisabled ? 'disabled' : 'ready', conflict: true, gamePath };
+  }
+  return { state: anyDisabled ? 'disabled' : 'ready', conflict: false, gamePath };
+}
+
+/** Toggle both EDHM proxy DLLs, rolling back if the second rename fails. */
+async function ToggleEDHMmod(gameInstance) {
+  const status = await GetEDHMStatus(gameInstance);
+  if (status.state === 'not_installed') return { ...status, changed: false };
+  if (status.conflict) {
+    throw new Error('The EDHM DLL files are incomplete or duplicated. Reinstall EDHM or correct the files before toggling it.');
+  }
+  if (fileHelper.isProcessRunning('EliteDangerous64.exe')) {
+    throw new Error('Elite Dangerous is currently running. Close the game before enabling or disabling EDHM.');
+  }
+
+  const disabling = status.state === 'ready';
+  const pairs = [];
+  for (const { enabled, disabled } of EDHM_DLL_FILES) {
+    const enabledPath = path.join(status.gamePath, enabled);
+    const disabledPath = path.join(status.gamePath, disabled);
+    pairs.push({
+      sourcePath: disabling ? enabledPath : disabledPath,
+      destinationPath: disabling ? disabledPath : enabledPath,
+    });
+  }
+
+  const completed = [];
+  try {
+    for (const pair of pairs) {
+      await rename(pair.sourcePath, pair.destinationPath);
+      completed.push(pair);
+    }
+  } catch (error) {
+    for (const pair of completed.reverse()) {
+      try { await rename(pair.destinationPath, pair.sourcePath); } catch {}
+    }
+    const action = disabling ? 'disable' : 'enable';
+    throw new Error(`Unable to ${action} EDHM: ${error.message}. Ensure Elite Dangerous is not running and that the game folder is writable.`);
+  }
+  return { ...(await GetEDHMStatus(gameInstance)), changed: true };
 }
 
 /** This are actions to be run after an App Update is applied and Before EDHM mod is installed. */
@@ -1302,12 +1384,17 @@ ipcMain.handle('UninstallEDHMmod', (event, gameInstance) => {
     throw new Error(error.message + error.stack);
   }
 });
-ipcMain.handle('DisableEDHMmod', (event, gameInstance) => {
-  try {
-    return DisableEDHMmod(gameInstance);
-  } catch (error) {
-    throw new Error(error.message + error.stack);
-  }
+ipcMain.handle('GetEDHMStatus', async (event, gameInstance) => {
+  try { return await GetEDHMStatus(gameInstance); }
+  catch (error) { throw new Error(error.message); }
+});
+ipcMain.handle('ToggleEDHMmod', async (event, gameInstance) => {
+  try { return await ToggleEDHMmod(gameInstance); }
+  catch (error) { throw new Error(error.message); }
+});
+ipcMain.handle('DisableEDHMmod', async (event, gameInstance) => {
+  try { return await ToggleEDHMmod(gameInstance); }
+  catch (error) { throw new Error(error.message); }
 });
 
 ipcMain.handle('readSetting', (event, key, defaultValue = null) => {
@@ -1339,6 +1426,7 @@ ipcMain.handle('DoHotFix', async (event) => {
 export default { 
   initializeSettings, loadSettings, saveSettings, 
   installEDHMmod, CheckEDHMinstalled, setCrossOverDllOverrides, installTPModArchive,
+  GetEDHMStatus, ToggleEDHMmod,
   getInstanceByName, getActiveInstance, getActiveInstanceEx,
   GetInstanceDataDirectory,
   LoadGlobalSettings, saveGlobalSettings,

@@ -1246,8 +1246,9 @@ function isProcessRunning(name) {
             const output = execSync("tasklist").toString().toLowerCase();
             return output.includes(name.toLowerCase());
 
-        } else if (platform === "linux") {
-            const output = execSync("ps -A").toString().toLowerCase();
+        } else if (platform === "linux" || platform === "darwin") {
+            // Include command arguments so Wine/CrossOver processes are detectable.
+            const output = execSync("ps -A -o comm= -o args=").toString().toLowerCase();
             return output.includes(name.toLowerCase());
 
         } else {
@@ -2267,6 +2268,7 @@ export default {
 
   createWindowsShortcut,
   createLinuxShortcut,
+  isProcessRunning,
   terminateProgram,
   runInstaller, runScripOrProgram,
 

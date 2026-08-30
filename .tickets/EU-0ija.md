@@ -1,6 +1,6 @@
 ---
 id: EU-0ija
-status: open
+status: in_progress
 deps: []
 links: []
 created: 2026-06-20T05:37:54Z
@@ -243,3 +243,7 @@ Packaged and published experimental macOS/CrossOver PoC release to GitHub: https
 **2026-06-20T18:32:35Z**
 
 Published point prerelease including only the post-release keyboard-navigation change for ThemeTab. Commit: 507c7903 Add keyboard navigation for theme selection. Release: https://github.com/ProbabilityEngineer/EDHM_UI/releases/tag/macos-crossover-poc-2026-06-20.1 with artifact EDHM-UI-V3-macos-crossover-poc-darwin-arm64-2026-06-20.1.zip.
+
+**2026-08-30T16:30:45Z**
+
+Fetched upstream: origin/main is 31 commits behind upstream/main. Audited all 31 commits. Upstream has useful theme-apply reliability, EDHM status/toggle, mixed-DLL recovery, notification, and XML-preview improvements, but wholesale merge is unsafe: it removes CrossOver DLL override script, mac icon, and ticket/agent files; replaces mac-aware SettingsWindow paths/UI; reverts TPMods symlink-safe installTPModArchive to decompressFile; and rewrites path/helper files. Preserve mac branch and selectively port/adapt candidates.
