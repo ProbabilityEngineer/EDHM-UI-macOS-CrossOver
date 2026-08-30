@@ -16,7 +16,6 @@ Download the ZIP for your Mac from the [GitHub Releases](https://github.com/Prob
 
 - **Universal** — Apple Silicon and Intel Macs (recommended)
 - **arm64** — Apple Silicon Macs
-- **x64** — Intel Macs
 
 The app is ad-hoc signed. If macOS blocks the first launch, Control-click the app, choose **Open**, and confirm.
 
