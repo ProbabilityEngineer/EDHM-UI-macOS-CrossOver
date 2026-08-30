@@ -8,11 +8,11 @@ This fork is intended for **macOS users running the Windows game through CrossOv
 
 This build is based on upstream EDHM-UI **v3.0.70** and bundles the Odyssey EDHM payload **v22.01**. It retains the upstream Windows application behavior while adding macOS/CrossOver support for paths, installation, themes, TPMods, and packaging.
 
-The macOS work is maintained in the [`macos-crossover-poc`](https://github.com/ProbabilityEngineer/EDHM_UI/tree/macos-crossover-poc) branch. It is a fork/adaptation, not an official upstream macOS release. Upstream project and mod credits remain with [Blue Mystic](https://github.com/BlueMystical), [psychicEgg](https://github.com/psychicEgg), and the EDHM contributors.
+The macOS work is maintained in the [`macos-crossover-poc`](https://github.com/ProbabilityEngineer/EDHM-UI-macOS-CrossOver/tree/macos-crossover-poc) branch. It is a fork/adaptation, not an official upstream macOS release. Upstream project and mod credits remain with [Blue Mystic](https://github.com/BlueMystical), [psychicEgg](https://github.com/psychicEgg), and the EDHM contributors.
 
 ## Download
 
-Download the ZIP for your Mac from the [GitHub Releases](https://github.com/ProbabilityEngineer/EDHM_UI/releases):
+Download the ZIP for your Mac from the [GitHub Releases](https://github.com/ProbabilityEngineer/EDHM-UI-macOS-CrossOver/releases):
 
 - **Universal** — Apple Silicon and Intel Macs (recommended)
 - **arm64** — Apple Silicon Macs
