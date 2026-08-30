@@ -1,6 +1,6 @@
 <template>
 
-  <div class="theme-tab"> <!-- theme-container -->
+  <div class="theme-tab" ref="themeTab" tabindex="0" @keydown="onThemeListKeyDown"> <!-- theme-container -->
 
     <!-- Loading Spinner -->
     <div v-if="loading" class="spinner-container">
@@ -12,19 +12,17 @@
     <!-- List of Themes -->
     <ul v-else>
       <li v-for="image in images" :key="image.id" :id="'image-' + image.id" class="image-container"
-        :class="{ 'selected': image.id === selectedImageId }" @click="OnSelectTheme(image)"
+        :class="{ 'selected': image.id === selectedImageId }" @click="focusThemeList(); OnSelectTheme(image)"
         @contextmenu="onRightClick($event, image)">
         <img :src="image.src" :alt="image.alt" class="img-thumbnail" aria-label="Image of {{ image.name }}" />
         <span class="image-label">{{ image.name }}</span>
-        <div v-if="isFavoriteEx(image)" class="badge-triangle"></div>
+        <div v-if="isFavoriteEx(image)" class="favorite-badge">★ Favorite</div>
       </li>
     </ul>
 
     <!-- Context Menu for Themes -->
     <ul v-if="showContextMenuFlag" :style="contextMenuStyle" class="dropdown-menu border border-primary shadow show" ref="contextMenu">
       <li><a class="dropdown-item" href="#" @click="onContextMenu_Click('ApplyTheme')">Apply Theme</a></li>
-      <li><a class="dropdown-item" href="#" :class="{ 'disabled': !isPreviewAvailable }"
-          @click="isPreviewAvailable ? onContextMenu_Click('ThemePreview') : null">Theme Preview</a></li>
       <li><a class="dropdown-item" href="#" @click="onContextMenu_Click('OpenFolder')">Open Theme Folder</a></li>
       <li><a class="dropdown-item" href="#" @click="onContextMenu_Click('DeleteTheme')">Delete Theme</a></li>
       <li><hr class="dropdown-divider"></li>
@@ -79,10 +77,6 @@ export default {
     };
   },
   computed: {
-    /** Check if the selected theme has a preview available */
-    isPreviewAvailable() {
-      return this.selectedTheme && this.selectedTheme.preview;
-    },
     isFavorite() {
       return this.selectedTheme && this.selectedTheme.file && this.selectedTheme.file.isFavorite;
     },
@@ -168,8 +162,37 @@ export default {
           }))
         );      
 
+        const currentSettingsPath = await window.api.joinPath(GamePath, 'ThemeSettings.json');
+        const currentSettingsExists = await window.api.fileExists(currentSettingsPath);
+        let appliedThemeName = null;
+        if (currentSettingsExists) {
+          try {
+            const currentSettings = await window.api.getJsonFile(currentSettingsPath);
+            appliedThemeName = currentSettings?.credits?.theme || currentSettings?.name || currentSettings?.theme || null;
+          } catch (error) {
+            console.warn('Could not read current ThemeSettings.json:', error);
+          }
+        }
+
+        const appliedTheme = appliedThemeName
+          ? this.themes.find(item => item.id !== 0 && item.file?.credits?.theme === appliedThemeName)
+          : null;
+        if (appliedTheme) {
+          this.themes[0].name = 'Current Settings: ' + appliedThemeName;
+          this.themes[0].src = appliedTheme.src;
+          this.themes[0].preview = appliedTheme.preview;
+          this.themes[0].file.credits = { ...this.themes[0].file.credits, ...appliedTheme.file.credits };
+        }
+
         this.FilterThemes(this.programSettings.FavToogle);
         EventBus.emit('OnThemesLoaded', this.themes);  //<- this event will be heard in 'App.vue'
+
+        const rememberedThemeName = this.getRememberedThemeName();
+        const initialTheme = this.findThemeByName(rememberedThemeName) || appliedTheme || this.themes[0];
+        if (initialTheme) {
+          this.OnSelectTheme({ id: initialTheme.id });
+        }
+        this.focusThemeList();
 
       } catch (error) {
         console.error('Failed to load files:', error);
@@ -195,10 +218,73 @@ export default {
       //console.log('Filtering Favorites: ', this.images.length);
     },
 
+    selectedThemeStorageKey() {
+      const activeInstance = this.programSettings?.ActiveInstance || 'default';
+      return `EDHM_UI_V3.LastSelectedTheme.${activeInstance}`;
+    },
+    getRememberedThemeName() {
+      try {
+        return localStorage.getItem(this.selectedThemeStorageKey());
+      } catch (error) {
+        console.warn('Could not read remembered selected theme:', error);
+        return null;
+      }
+    },
+    rememberSelectedTheme(theme) {
+      try {
+        if (theme?.id && theme?.file?.credits?.theme) {
+          localStorage.setItem(this.selectedThemeStorageKey(), theme.file.credits.theme);
+        }
+      } catch (error) {
+        console.warn('Could not remember selected theme:', error);
+      }
+    },
+    findThemeByName(themeName) {
+      if (!themeName) return null;
+      return this.themes.find(item => item.id !== 0 && item.file?.credits?.theme === themeName) || null;
+    },
+    focusThemeList() {
+      this.$nextTick(() => this.$refs.themeTab?.focus());
+    },
+    onThemeListKeyDown(event) {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (!this.images || this.images.length === 0) return;
+
+      const currentIndex = Math.max(0, this.images.findIndex(image => image.id === this.selectedImageId));
+      let nextIndex = currentIndex;
+
+      switch (event.key) {
+        case 'ArrowUp':
+          nextIndex = Math.max(0, currentIndex - 1);
+          break;
+        case 'ArrowDown':
+          nextIndex = Math.min(this.images.length - 1, currentIndex + 1);
+          break;
+        case 'Home':
+          nextIndex = 0;
+          break;
+        case 'End':
+          nextIndex = this.images.length - 1;
+          break;
+        case 'Enter':
+          if (this.selectedTheme) {
+            EventBus.emit('ApplyGivenTheme', JSON.parse(JSON.stringify(this.selectedTheme)));
+          }
+          event.preventDefault();
+          return;
+        default:
+          return;
+      }
+
+      event.preventDefault();
+      this.OnSelectTheme(this.images[nextIndex]);
+    },
+
     /** When Fired, Selects and Loads a given Theme   * 
      * @param theme We only need the id (index in the list) -> { id: 0 }
      */
-    OnSelectTheme(theme) {
+    OnSelectTheme(theme, loadTheme = true) {
       try {
         //console.log(this.selectedTheme);
         if (theme && !isEmpty(theme)) {
@@ -212,6 +298,7 @@ export default {
               if (selectedItem) {
                 this.selectedImageId = searchIndex;
                 this.selectedTheme = selectedItem;                                      //console.log('selectedTheme: ', this.selectedTheme);
+                this.rememberSelectedTheme(selectedItem);
 
                 this.$nextTick(() => {
                   const selectedElement = document.getElementById('image-' + selectedItem.id);
@@ -219,7 +306,19 @@ export default {
                     selectedElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                   }
                 });
-                EventBus.emit('ThemeClicked', JSON.parse(JSON.stringify(selectedItem))); //<- this event will be heard in 'MainNavBars.vue'
+                if (loadTheme) {
+                  EventBus.emit('ThemeClicked', JSON.parse(JSON.stringify(selectedItem))); //<- this event will be heard in 'MainNavBars.vue'
+                }
+
+                if (selectedItem.preview || selectedItem.src) {
+                  EventBus.emit('ShowThemePreview', {
+                    src: selectedItem.preview || selectedItem.src,
+                    name: selectedItem.name
+                  });
+                } else {
+                  EventBus.emit('InitializeHUDimage', null);
+                }
+                return selectedItem;
               }
             }
             else {
@@ -241,10 +340,12 @@ export default {
         const index = this.themes.findIndex(obj => obj.file.name === theme_name);
         if (index !== -1) {
           console.log('Theme Found: ', this.themes[index].name);
-          this.OnSelectTheme({ id: index });
-          EventBus.emit('OnApplyTheme', null); //<- this event will be heard in 'NavBars.vue'  
+          const selectedItem = this.OnSelectTheme({ id: index }, false);
+          if (selectedItem) {
+            EventBus.emit('ApplyGivenTheme', JSON.parse(JSON.stringify(selectedItem)));
+          }
         } else {
-            console.log(`Object with name ${tName} not found.`);
+            console.log(`Object with name ${theme_name} not found.`);
         }
       }
     },
@@ -307,9 +408,25 @@ export default {
      * @param theme data of the applied theme     */
     CurretSettingsUpdated(theme) {
       if (this.themes && this.themes.length > 0) {
-        //console.log(theme);
+        // Keep the synthetic Current Settings entry in sync with the newly applied theme.
         this.themes[0].name = 'Current Settings: ' + theme.credits.theme;
         this.themes[0].file.credits = theme.credits;
+
+        // Move the visible selection marker to the theme that was actually applied.
+        // Applying a theme does not re-click the list item, so without this the
+        // thumbnail highlight can remain on an older/stale selection.
+        const appliedTheme = this.themes.find(item =>
+          item.id !== 0 && item.file?.credits?.theme === theme.credits.theme
+        );
+        if (appliedTheme) {
+          this.themes[0].src = appliedTheme.src;
+          this.themes[0].preview = appliedTheme.preview;
+          this.selectedImageId = appliedTheme.id;
+          this.selectedTheme = appliedTheme;
+          this.rememberSelectedTheme(appliedTheme);
+        }
+
+        this.FilterThemes(this.favToogle);
       }
     },
 
@@ -329,14 +446,7 @@ export default {
         if (this.selectedTheme) {
           switch (action) {
             case 'ApplyTheme':
-              EventBus.emit('OnApplyTheme', null); //<- this event will be heard in 'MainNavBars.vue'
-              break;
-
-            case 'ThemePreview':
-              //console.log(this.selectedTheme);
-              if (this.selectedTheme.preview) {
-                window.api.openUrlInBrowser(this.selectedTheme.preview);
-              }
+              EventBus.emit('ApplyGivenTheme', JSON.parse(JSON.stringify(this.selectedTheme)));
               break;
 
             case 'OpenFolder':
@@ -396,6 +506,7 @@ export default {
     */
     onRightClick(event, image) {
       event.preventDefault(); // Prevent the default context menu
+      this.focusThemeList();
       this.OnSelectTheme(image);
       this.showContextMenu(event.clientX, event.clientY); // Show the custom context menu
     },
@@ -522,6 +633,20 @@ ul {
   box-shadow: 0 0 10px #00bfff;
 }
 
+.selected::after {
+  content: 'Selected';
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  background-color: rgba(0, 191, 255, 0.85);
+  color: #001018;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  z-index: 2;
+}
+
 .image-label {
   position: absolute;
   bottom: 5px;
@@ -531,22 +656,17 @@ ul {
   border-radius: 3px;
 }
 
-.badge-triangle {
-  width: 0;
-  height: 0;
-  border-left: 40px solid transparent;
-  border-top: 40px solid #ffc107;
+.favorite-badge {
   position: absolute;
-  top: 0;
-  right: 0;
-}
-.badge-triangle::before {
-  content: '★';
-  position: absolute;
-  top: -50px;
-  right: 0px;
-  font-size: 26px;
-  color: #110ec7;
+  top: 5px;
+  right: 5px;
+  background-color: rgba(255, 193, 7, 0.9);
+  color: #151000;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  z-index: 2;
 }
 
 .spinner-container {

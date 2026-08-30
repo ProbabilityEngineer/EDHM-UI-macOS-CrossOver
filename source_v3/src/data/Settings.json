@@ -92,7 +92,9 @@
       }
     ],
     "PlayerJournal":"%USERPROFILE%\\Saved Games\\Frontier Developments\\Elite Dangerous",  
-    "UserDataFolder": "%USERPROFILE%\\EDHM_UI",    
+    "PlayerConfigFolder":"%USERPROFILE%\\AppData\\Local\\Frontier Developments\\Elite Dangerous\\Options\\Graphics",  
+    "CrossOverBottlePath":"",
+    "UserDataFolder": "%EDHM_APPDATA%",    
     "LastFolderUsed":"",
 
     "HUD_Cover": "HUD_Type8",

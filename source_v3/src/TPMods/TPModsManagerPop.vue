@@ -275,6 +275,17 @@ export default {
 
                 const installedMods = await window.api.GetInstalledTPMods(this.ActiveInstance.path);    //console.log('Installed Mods:', installedMods);
 
+                if (installedMods?.setupNeeded) {
+                    this.TPmods = [];
+                    this.statusText = '3PMods not available yet';
+                    EventBus.emit('RoastMe', {
+                        type: 'Warning',
+                        title: '3PMods Not Ready',
+                        message: installedMods.message || 'Finish setting up this game instance first.'
+                    });
+                    return;
+                }
+
                 this.TPmods = [];
                 this.TPmods = await this.LoadTPMods(availableMods, installedMods); //console.log(this.TPmods);
                 this.statusText = this.ModsCounter + ' Detected Mods';
@@ -462,6 +473,15 @@ export default {
         async open(data) {
             this.visible = true;
             this.ActiveInstance = data;
+            if (!this.ActiveInstance?.path) {
+                this.statusText = '3PMods not available yet';
+                EventBus.emit('RoastMe', {
+                    type: 'Warning',
+                    title: '3PMods Not Ready',
+                    message: 'No game folder is configured for this game instance yet. Open Settings and configure the game path first.'
+                });
+                return;
+            }
             this.Initialize();
             console.log('Poping TPMods..');
         },
@@ -674,8 +694,9 @@ export default {
                     const folderPath = filePath[0];
                     const gamePath = this.ActiveInstance.path;
 
-                    //- Unzip the file:
-                    await window.api.decompressFile(folderPath, gamePath);
+                    //- Install the TPMod archive. On mac this extracts to temp first so zip entries
+                    //- under EDHM-ini/ShaderFixes are copied into symlink targets instead of through symlinks.
+                    await window.api.installTPModArchive(folderPath, gamePath);
                     await this.Initialize(); //<- Re-load the mods list
                     this.statusText = 'Mod Installed.';
                 }
@@ -837,8 +858,9 @@ export default {
                 //- Some Cleanup:
                 window.api.removeDownloadProgressListener(this.progressListener);
 
-                //- Unzip the file:
-                await window.api.decompressFile(filePath, Options.game_path);
+                //- Install the TPMod archive. On mac this extracts to temp first so zip entries
+                //- under EDHM-ini/ShaderFixes are copied into symlink targets instead of through symlinks.
+                await window.api.installTPModArchive(filePath, Options.game_path);
                 await this.Initialize(); //<- Re-load the mods list
                 this.showSpinner = false;
                 this.showProgressBar = false;

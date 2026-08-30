@@ -415,7 +415,7 @@ async function ExportTheme(themeData) { //
       //1. RESOLVE THE THEMES PATH:
       const ThemeName = themeData.credits.theme;
       const ThemePath = themeData.path;
-      const TempPath = FileHelper.resolveEnvVariables(`%LOCALAPPDATA%\\Temp\\EDHM_UI\\${ThemeName}`);
+      const TempPath = path.join(FileHelper.getTempRoot(), 'EDHM_UI', ThemeName);
 
       //2. CREATE THE NEW THEME FOLDER IF IT DOESNT EXIST:
       if (FileHelper.ensureDirectoryExists(TempPath)) {
@@ -465,7 +465,7 @@ async function ImportTheme(zip_path) {
       const ActiveInstance = await settingsHelper.getActiveInstance();
       const GameType = ActiveInstance.key === 'ED_Odissey' ? 'ODYSS' : 'HORIZ';
       const DataPath = FileHelper.resolveEnvVariables(
-            settingsHelper.readSetting('UserDataFolder', '%USERPROFILE%\\EDHM_UI') );      
+            settingsHelper.readSetting('UserDataFolder', FileHelper.getAppDataRoot()) );      
       const themes_path = path.join(DataPath, GameType, 'Themes');
       FileHelper.ensureDirectoryExists(themes_path);
 
@@ -484,7 +484,7 @@ async function ImportTheme(zip_path) {
 /** Copies the Current Settings Files into a backup */
 async function BackUpCurrentSettings() {
   try {
-    const TempPath = FileHelper.resolveEnvVariables('%LOCALAPPDATA%\\Temp\\EDHM_UI\\CurrentSettings');
+    const TempPath = path.join(FileHelper.getTempRoot(), 'EDHM_UI', 'CurrentSettings');
     console.log('Backup To: ', TempPath);
 
     // Borrar carpeta temporal si existe
@@ -526,7 +526,7 @@ async function BackUpCurrentSettings() {
 
 async function RestoreCurrentSettings() {
   try {
-    const TempPath = FileHelper.resolveEnvVariables('%LOCALAPPDATA%\\Temp\\EDHM_UI\\CurrentSettings');
+    const TempPath = path.join(FileHelper.getTempRoot(), 'EDHM_UI', 'CurrentSettings');
     const ActiveInstance = await settingsHelper.getActiveInstanceEx();
     const DestinationPath = path.join(ActiveInstance.path, 'EDHM-ini');
 

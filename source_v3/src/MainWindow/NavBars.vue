@@ -20,7 +20,7 @@
               <option value="" disabled>──────────</option>
               <option value="mnuInstallMod">Install EDHM</option>
               <option value="mnuUninstallMod">Un-install EDHM</option>
-              <option value="mnuDisableMod">Enable/Disable EDHM</option>
+              <option value="mnuDisableMod">{{ edhmToggleMenuLabel }}</option>
               <option value="" disabled>──────────</option>
               <option value="mnuGoToDiscord">Help? Join our Discord</option>
               <option value="mnuReadManual">Read the Manual</option>
@@ -55,7 +55,7 @@
               <i class="bi bi-arrow-bar-down"></i>
             </button>
             <button id="cmdSaveTheme" class="btn btn-outline-secondary" type="button" data-bs-toggle="tooltip"
-              data-bs-placement="bottom" data-bs-title="Save Theme" @mousedown="saveTheme_Click">
+              data-bs-placement="bottom" data-bs-title="Save Theme Changes" @mousedown="saveTheme_Click">
               <i class="bi bi-floppy"></i>
             </button>
             <button id="cmdReloadThemes" class="btn btn-outline-secondary" type="button" data-bs-toggle="tooltip"
@@ -69,7 +69,8 @@
               <i class="bi bi-star"></i>
             </button>
 
-            <button id="cmdApplyTheme" class="btn btn-apply-theme" @click="applyTheme">Apply Theme</button>
+            <button id="cmdApplyTheme" class="btn btn-apply-theme" :disabled="isApplying || isThemeLoading"
+              @click="applyTheme">Apply Theme</button>
 
             <!-- History Box -->
             <select class="form-select" id="cboHistoryBox" @change="OnHistoryBox_Click" v-model="selectedHistory"
@@ -159,7 +160,8 @@
           <!-- Game Selection Dropdown -->
           <div class="nav-item">
             <select id="gameSelect" class="form-select game-dropdown-border main-menu-style" v-model="selectedGame"
-              @change="OnGameInstanceChange">
+              @change="OnGameInstanceChange" :disabled="gameMenuItems.length === 0">
+              <option v-if="gameMenuItems.length === 0" value="">No game configured</option>
               <option v-for="(game, index) in gameMenuItems" :key="index" :value="game">{{ game }}</option>
             </select>
           </div>
@@ -236,6 +238,9 @@ export default {
       statusText: '',
       showFavorites: false,
       showSpinner: true,
+      isApplying: false,
+      isThemeLoading: false,
+      themeLoadRequestId: 0,
 
       programSettings: {},
       themeTemplate: {},
@@ -252,6 +257,8 @@ export default {
       modVersion: '',
       selectedGame: '',
       gameMenuItems: [],
+      edhmInstalled: null,
+      edhmStatus: null,
 
       showProgressBar: false,
       progressValue: 0,
@@ -275,36 +282,84 @@ export default {
     UserSettingsTab,
     GlobalSettingsTab
   },
+  computed: {
+    edhmToggleMenuLabel() {
+      if (this.edhmStatus?.state === 'ready') return 'Disable EDHM';
+      if (this.edhmStatus?.state === 'disabled') return 'Enable EDHM';
+      if (this.edhmStatus?.state === 'not_installed') return 'Enable/Disable EDHM';
+      if (this.edhmInstalled === true) return 'Disable EDHM';
+      if (this.edhmInstalled === false) return 'Enable EDHM';
+      return 'Enable/Disable EDHM';
+    }
+  },
   methods: {
 
+    async hydrateFooterState(settings) {
+      this.programSettings = settings || this.programSettings || {};
+      this.appVersion = await window.api.getAppVersion();
+      this.modVersion = this.programSettings.Version_ODYSS || this.programSettings.Version_HORIZ || '';
+      this.showFavorites = !!this.programSettings.FavToogle;
+      this.activeTab = ref('themes');
+
+      const configuredGameInstances = (this.programSettings.GameInstances || [])
+        .flatMap(instance => instance.games || [])
+        .filter(game => game?.path)
+        .map(game => game.instance)
+        .filter(Boolean);
+      this.gameMenuItems = [...new Set(configuredGameInstances)];
+      if (this.gameMenuItems.length === 0) {
+        this.selectedGame = '';
+      }
+
+      try {
+        this.ActiveInstance = await window.api.getActiveInstance();
+        this.selectedGame = this.ActiveInstance?.instance || this.programSettings.ActiveInstance || '';
+        if (!this.gameMenuItems.includes(this.selectedGame) && this.gameMenuItems.length > 0) {
+          this.selectedGame = this.gameMenuItems[0];
+        }
+      } catch (error) {
+        this.ActiveInstance = {};
+        this.selectedGame = this.programSettings.ActiveInstance || '';
+      }
+
+      if (this.gameMenuItems.length === 0) {
+        this.selectedGame = '';
+      }
+    },
+    async refreshEdhmInstallState() {
+      try {
+        if (!this.ActiveInstance?.path) {
+          this.edhmInstalled = false;
+          this.edhmStatus = { state: 'not_installed' };
+          return;
+        }
+        this.edhmStatus = await window.api.GetEDHMStatus(JSON.parse(JSON.stringify(this.ActiveInstance)));
+        this.edhmInstalled = this.edhmStatus?.state === 'ready';
+      } catch (error) {
+        console.warn('Could not determine EDHM install state:', error);
+        this.edhmInstalled = null;
+        this.edhmStatus = null;
+      }
+    },
     async OnInitialize(settings) {
       try {
         console.log('Initializing NavBars..');
 
-        this.programSettings = settings;
-        this.appVersion = await window.api.getAppVersion();
-        this.modVersion = settings.Version_ODYSS;
-        this.ActiveInstance = await window.api.getActiveInstance();
-        this.selectedGame = this.ActiveInstance.instance;
-        this.showFavorites = settings.FavToogle;
-        this.activeTab = ref('themes');
+        await this.hydrateFooterState(settings);
+        await this.refreshEdhmInstallState();
 
-        this.DATA_DIRECTORY = await window.api.GetInstanceDataDirectory(this.ActiveInstance.key); //<- Returns the path to the EDHM data directory.
-        console.log('DATA_DIRECTORY:', this.DATA_DIRECTORY);
+        if (this.ActiveInstance?.key) {
+          this.DATA_DIRECTORY = await window.api.GetInstanceDataDirectory(this.ActiveInstance.key); //<- Returns the path to the EDHM data directory.
+          console.log('DATA_DIRECTORY:', this.DATA_DIRECTORY);
+        }
 
-        // Populate game instances with the `instance` values from `Settings`
-        this.gameMenuItems = ref(
-          settings.GameInstances.flatMap(instance =>
-            instance.games
-              .filter(game => game.path) // only include games with non-empty 'path'
-              .map(game => game.instance)
-          )
-        );
-
-        this.themeTemplate = await this.LoadCurrentSettings();
-        EventBus.emit('OnSelectTheme', { id: 0 });   //<- Event Listened at 'ThemeTab.vue'    
-
-        await this.History_LoadElements();
+        if (this.ActiveInstance?.path) {
+          this.themeTemplate = await this.LoadCurrentSettings();
+          EventBus.emit('OnSelectTheme', { id: 0 });   //<- Event Listened at 'ThemeTab.vue'
+          await this.History_LoadElements();
+        } else {
+          this.historyOptions = [];
+        }
 
       } catch (error) {
         EventBus.emit('ShowError', error);
@@ -326,35 +381,60 @@ export default {
      * @param theme Data of selected Theme
      */
     async LoadTheme(theme) {
+      const requestId = ++this.themeLoadRequestId;
+      this.isThemeLoading = true;
       this.showSpinner = true;
       try {
         if (theme && theme.file) {
           const template = JSON.parse(JSON.stringify(theme.file));
           console.log('Loading Theme..', template.credits.theme);
+          let loadedTemplate;
 
           if (template.credits.theme === 'Current Settings') {
-            this.themeTemplate = await window.api.GetCurrentSettingsTheme(template.path);
-            this.currentSettingsPath = template.path;
+            loadedTemplate = await window.api.GetCurrentSettingsTheme(template.path);
           } else {
-            this.themeTemplate = await window.api.LoadTheme(template.path);
-            console.log('Loaded Theme:', this.themeTemplate);
-            this.themeTemplate.credits = theme.file.credits;
+            loadedTemplate = await window.api.LoadTheme(template.path);
+            loadedTemplate.credits = theme.file.credits;
           }
 
-          EventBus.emit('ThemeLoaded', JSON.parse(JSON.stringify(this.themeTemplate))); //<- this event will be heard on 'App.vue'
+          if (requestId !== this.themeLoadRequestId) return false;
+          this.themeTemplate = loadedTemplate;
+          this.currentSettingsPath = template.credits.theme === 'Current Settings' ? template.path : '';
+          console.log('Loaded Theme:', this.themeTemplate);
+          EventBus.emit('ThemeLoaded', JSON.parse(JSON.stringify(this.themeTemplate)));
           this.statusText = 'Theme: ' + theme.name;
+          return true;
         }
+        return false;
       } catch (error) {
         EventBus.emit('ShowError', new Error(error.message + error.stack));
-      } finally { this.showSpinner = false; }
+        return false;
+      } finally {
+        if (requestId === this.themeLoadRequestId) {
+          this.isThemeLoading = false;
+          this.showSpinner = false;
+        }
+      }
     },
     async applyTheme() {
+      if (this.isApplying || this.isThemeLoading) return false;
+      if (!this.themeTemplate?.credits?.theme) {
+        EventBus.emit('ShowError', new Error('Select a theme and wait for it to finish loading before applying it.'));
+        return false;
+      }
+      this.isApplying = true;
       this.showSpinner = true;
       try {
         console.log('0. Applying Theme:', this.themeTemplate.credits.theme);
 
         this.ActiveInstance = await window.api.getActiveInstance();
         console.log('1. ActiveInstance:', this.ActiveInstance.instance);
+        await this.refreshEdhmInstallState();
+        if (this.edhmStatus?.state !== 'ready') {
+          throw new Error(this.edhmStatus?.state === 'disabled'
+            ? 'EDHM is disabled. Enable EDHM before applying a theme.'
+            : 'EDHM is not installed for the active game instance.');
+        }
 
         const GamePath = await window.api.joinPath(this.ActiveInstance.path, 'EDHM-ini');
         const GameType = this.ActiveInstance.key === 'ED_Odissey' ? 'ODYSS' : 'HORIZ';
@@ -397,6 +477,7 @@ export default {
             console.log(counter + ' ' + counterName + ' added!');
           } catch (error) {
             console.log('ERROR @SettingsHelper.applyTheme().applySettings():', error);
+            throw error;
           }
         }
 
@@ -418,39 +499,44 @@ export default {
         const updatedInis = await window.api.ApplyTemplateValuesToIni(template, defaultINIs);
         console.log('7. Applying Changes to the INIs...', updatedInis);
         console.log('8. Saving the INI files..');
-        const _ret = await window.api.SaveThemeINIs(GamePath, updatedInis);
+        const inisSaved = await window.api.SaveThemeINIs(GamePath, updatedInis);
+        if (!inisSaved) throw new Error('One or more theme INI files could not be saved.');
 
-        const _curSettsSAved = await window.api.SaveTheme(template);
-        console.log('9. Saving Current Settings: ', _curSettsSAved);
+        // ThemeSettings.json is the in-game reload signal; update it last.
+        const currentSettingsSaved = await window.api.SaveTheme(template);
+        if (!currentSettingsSaved) throw new Error('Theme INIs were saved, but ThemeSettings.json could not be updated.');
 
         console.log('10. Writing Theme in History..');
         await this.History_AddSettings(template);
-        
-        if (_ret) {
-          console.log('DONE! - Theme Applied:', this.themeTemplate.credits.theme);
-          EventBus.emit('OnThemeApplied',         JSON.parse(JSON.stringify(template))); //<- Listen on App.vue
-          EventBus.emit('CurretSettingsUpdated',  JSON.parse(JSON.stringify(template))); //<- Listen on ThemeTab.vue
-          EventBus.emit('RoastMe', { type: 'Success', message: `<b>Theme: '${template.credits.theme}' Applied!` }); //</b><small>Press <b>F11</b> in game to refresh the colors.</small>
-        }
-        setTimeout(() => {
-          this.showSpinner = false;
-        }, 1500);
+        console.log('DONE! - Theme Applied:', this.themeTemplate.credits.theme);
+        EventBus.emit('OnThemeApplied', JSON.parse(JSON.stringify(template)));
+        EventBus.emit('CurretSettingsUpdated', JSON.parse(JSON.stringify(template)));
+        EventBus.emit('RoastMe', { type: 'Success', message: `<b>Theme: '${template.credits.theme}' Applied!` });
+        return true;
 
       } catch (error) {
-        this.showSpinner = false;
-        console.log(error.message); // Check if the error message is defined 
-        console.log(error.stack); // Check the stack trace
+        console.log(error.message);
+        console.log(error.stack);
         EventBus.emit('ShowError', error);
+        return false;
+      } finally {
+        this.isApplying = false;
+        this.showSpinner = false;
       }
     },
     async ApplyGivenTheme(event) {
       try {
         console.log('Applying Given Theme:', event);
-        this.themeTemplate = event;
-        this.applyTheme();
+        if (event?.file) {
+          if (!await this.LoadTheme(event)) return false;
+        } else {
+          this.themeTemplate = JSON.parse(JSON.stringify(event));
+        }
+        return await this.applyTheme();
       } catch (error) {
         EventBus.emit('ShowError', error);
-      } 
+        return false;
+      }
     },
     async LoadCurrentSettings() {
       try {
@@ -501,13 +587,21 @@ export default {
         if (value === 'mnuUninstallMod') {
           const _ret = await window.api.UninstallEDHMmod(JSON.parse(JSON.stringify(ActiveInstance)));
           if (_ret) {
+            await this.refreshEdhmInstallState();
             EventBus.emit('RoastMe', { type: 'Success', message: 'EDHM Un-Installed!' });
           }
         }
         if (value === 'mnuDisableMod') {
-          const _ret = await window.api.DisableEDHMmod(JSON.parse(JSON.stringify(ActiveInstance)));
-          if (_ret) {
-            EventBus.emit('RoastMe', { type: 'Success', message: 'EDHM Disabled!' });
+          try {
+            const result = await window.api.ToggleEDHMmod(JSON.parse(JSON.stringify(ActiveInstance)));
+            this.edhmStatus = result;
+            this.edhmInstalled = result?.state === 'ready';
+            EventBus.emit('RoastMe', {
+              type: result?.state === 'ready' ? 'Success' : 'Info',
+              message: result?.state === 'ready' ? 'EDHM Enabled!' : 'EDHM Disabled!'
+            });
+          } catch (error) {
+            EventBus.emit('RoastMe', { type: 'Error', message: error.message || String(error) });
           }
         }
         if (value === 'mnuGoToDiscord') {
@@ -685,13 +779,11 @@ export default {
         const HistoryFolder = window.api.joinPath(this.DATA_DIRECTORY, 'History');            //console.log('HistoryFolder:', HistoryFolder);
         const files = await window.api.loadHistory(HistoryFolder, NumberOfSavesToRemember);   //console.log(files);        
 
-        this.historyOptions = ref(
-          files.map(file => ({
-            value: file.name,
-            text: file.date,
-            tag: file.path  // Add the file path as a tag
-          }))
-        );
+        this.historyOptions = files.map(file => ({
+          value: file.name,
+          text: file.date,
+          tag: file.path  // Add the file path as a tag
+        }));
         //console.log('History:', this.historyOptions);
 
       } catch (error) {
@@ -831,11 +923,13 @@ export default {
       //  -> showHideSpinner({ visible: true });
     },
 
-    OnModUpdated(data) {
+    async OnModUpdated(data) {
       // happens when the mod gets updated
       this.programSettings = data;
       //console.log('programSettings: ', programSettings);
-      this.modVersion = data.Version_ODYSS;
+      this.modVersion = data.Version_ODYSS || data.Version_HORIZ || '';
+      await this.hydrateFooterState(data);
+      await this.refreshEdhmInstallState();
     },
     OnXmlChanged(data) {
       console.log('XML Changed:', data);
@@ -986,7 +1080,7 @@ export default {
 
 
   },
-  mounted() {
+  async mounted() {
     /* EVENTS WE LISTEN TO HERE:  */
     EventBus.on('InitializeNavBars', this.OnInitialize);
     EventBus.on('setActiveTab', this.setActiveTab);
@@ -1001,6 +1095,13 @@ export default {
 
     if (typeof this.progressListener === 'function') {
       window.api.removeDownloadProgressListener(this.progressListener);
+    }
+
+    try {
+      const settings = await window.api.getSettings();
+      await this.hydrateFooterState(settings);
+    } catch (error) {
+      console.warn('Unable to pre-hydrate NavBars footer state:', error);
     }
   },
   beforeUnmount() {
@@ -1148,6 +1249,9 @@ body {
   background-color: darkorange;
   color: rgb(12, 12, 12);
   border: none;
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+  line-height: 1.5;
 }
 
 .btn-apply-theme:hover {

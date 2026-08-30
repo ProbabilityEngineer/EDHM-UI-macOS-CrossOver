@@ -3,14 +3,23 @@
 const { contextBridge, ipcRenderer, shell } = require('electron');
 const path = require('path');
 
+function getCrossPlatformParentFolder(filePath) {
+  if (!filePath) return filePath;
+
+  const looksLikeWindowsPath = /^[A-Za-z]:\\/.test(filePath) || filePath.includes('\\');
+  return looksLikeWindowsPath ? path.win32.dirname(filePath) : path.dirname(filePath);
+}
+
 contextBridge.exposeInMainWorld('api', {
 
   // #region Assets
 
   joinPath: (basePath, ...segments) => path.join(basePath, ...segments),
-  getParentFolder: (filePath) => path.dirname(filePath),
+  getParentFolder: (filePath) => getCrossPlatformParentFolder(filePath),
   getBaseName: (filePath, extension) => path.basename(filePath, extension),
   resolveEnvVariables: (inputPath) => ipcRenderer.invoke('resolve-env-variables', inputPath),
+  translateWindowsPath: (inputPath) => ipcRenderer.invoke('translate-windows-path', inputPath),
+  getBottlePaths: (bottleRoot) => ipcRenderer.invoke('get-bottle-paths', bottleRoot),
 
   getAssetPath: (assetPath) => ipcRenderer.invoke('get-asset-path', assetPath),
   getAssetFileUrl: (assetPath) => ipcRenderer.invoke('get-asset-file-url', assetPath),
@@ -149,8 +158,12 @@ contextBridge.exposeInMainWorld('api', {
   saveHistory: (historyFolder, theme) => ipcRenderer.invoke('save-history', historyFolder, theme),
 
   installEDHMmod: (gameInstance) => ipcRenderer.invoke('installEDHMmod', gameInstance),
+  installTPModArchive: (modZipFile, gamePath) => ipcRenderer.invoke('installTPModArchive', modZipFile, gamePath),
+  setCrossOverDllOverrides: (bottleRoot) => ipcRenderer.invoke('setCrossOverDllOverrides', bottleRoot),
   CheckEDHMinstalled: (gamePath) => ipcRenderer.invoke('CheckEDHMinstalled', gamePath),
   UninstallEDHMmod: (gameInstance) => ipcRenderer.invoke('UninstallEDHMmod', gameInstance),
+  GetEDHMStatus: (gameInstance) => ipcRenderer.invoke('GetEDHMStatus', gameInstance),
+  ToggleEDHMmod: (gameInstance) => ipcRenderer.invoke('ToggleEDHMmod', gameInstance),
   DisableEDHMmod: (gameInstance) => ipcRenderer.invoke('DisableEDHMmod', gameInstance),
   DoHotFix: async () => ipcRenderer.invoke('DoHotFix'),
 
@@ -196,6 +209,7 @@ contextBridge.exposeInMainWorld('api', {
 
   getPlatform: () => ipcRenderer.invoke('get-platform'),
   quitProgram: () => ipcRenderer.invoke('quit-program'),
+  restartProgram: () => ipcRenderer.invoke('restart-program'),
   runProgram: (filePath, args = []) => ipcRenderer.invoke('run-program', filePath, args),
 
 

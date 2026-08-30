@@ -125,16 +125,12 @@ export default {
           if (!Util.isNotNullOrEmpty(ActiveInstance.path)) {
             VirginPlayer = false; //<- We are not a New Player, we have an Active Instance
             // Either the Active Instance or its path is not set:
-            EventBus.emit('RoastMe', { type: 'Success', message: 'Welcome to the application!<br>You now need to tell EDHM where is your game located.', delay: 10000 });
-            EventBus.emit('RoastMe', { type: 'Info', message: '- Leave the Game running at the menus<br>- Click the `Green button`, read and do as it says<br>- the game will auto-close, the paths will set, save the settings.<br>- go check the game, should be pretty green.', autoHide: false, width:'460px' });
             EventBus.emit('open-settings-editor', this.InstallStatus); //<- Open the Settings Window
             return;
           }
         } else {
           // Welcome New User!  
           VirginPlayer = true; //<- We are a New Player
-          EventBus.emit('RoastMe', { type: 'Success', message: 'Welcome to the application!<br>You now need to tell EDHM where is your game located.', delay: 10000 });
-          EventBus.emit('RoastMe', { type: 'Info', message: '- Leave the Game running at the menus<br>- Click the `Green button`, read and do as it says<br>- the game will auto-close, the paths will set, save the settings.<br>- go check the game, should be pretty green.', autoHide: false, width:'460px' });
           EventBus.emit('open-settings-editor', this.InstallStatus); //<- Open the Settings Window
           return;
         }
@@ -155,7 +151,8 @@ export default {
         //- Initialize the Components:
         EventBus.emit('OnInitializeThemes', JSON.parse(JSON.stringify(this.settings))); //<- Event Listened at ThemeTab.vue
         EventBus.emit('InitializeNavBars',  JSON.parse(JSON.stringify(this.settings))); //<- Event Listened at NavBars.vue        
-        EventBus.emit('InitializeHUDimage', null);    //<- Event Listened at HudImage.vue
+        // ThemeTab selects the applied/remembered theme after loading and then emits ShowThemePreview.
+        // Do not show the default HUD first; it causes a jarring flash during theme list loading.
         EventBus.emit('DoLoadGlobalSettings', null);  //<- Event Listened at GlobalSettingsTab.vue
         EventBus.emit('DoLoadUserSettings', null);    //<- Event Listened at UserSettingsTab.vue
         EventBus.emit('ShipyardUI-Initialize', null); //<- Event Listened at ShipyardUI.vue
@@ -208,7 +205,7 @@ export default {
 
         const jsonString = JSON.stringify(newConfig, null, 4);
         this.settings = await window.api.saveSettings(jsonString);
-        this.OnGameInstance_Changed({ GameInstanceName: newConfig.ActiveInstance, InstallMod:true }); //<- Update the Game Instance
+        this.OnGameInstance_Changed({ GameInstanceName: newConfig.ActiveInstance, InstallMod:false }); //<- Update active instance without installing mod files
 
       } catch (error) {
         EventBus.emit('ShowError', error);
@@ -232,6 +229,18 @@ export default {
         const NewInstance = await window.api.getInstanceByName(e.GameInstanceName);
         console.log('NewInstance:', NewInstance);
 
+        if (!NewInstance?.path) {
+          this.settings.ActiveInstance = e.GameInstanceName;
+          const jsonString = JSON.stringify(this.settings, null, 4);
+          await window.api.saveSettings(jsonString);
+          EventBus.emit('InitializeNavBars', JSON.parse(JSON.stringify(this.settings)));
+          EventBus.emit('RoastMe', {
+            type: 'Warning',
+            message: `No game folder is configured yet for '${e.GameInstanceName}'. Open Settings and set its game path before installing or switching EDHM to it.`
+          });
+          return;
+        }
+
         if (e.InstallMod) {
           EventBus.emit('RoastMe', { type: 'Info', message: `Installing EDHM on '${e.GameInstanceName}'..` });
           const edhmInstalled = await window.api.installEDHMmod(NewInstance);
@@ -243,12 +252,20 @@ export default {
           }
           const Backup = await window.api.RestoreCurrentSettings();
           EventBus.emit('RoastMe', { type: 'Info', message: Backup });
+          if (edhmInstalled.crossOverDllOverrides && !edhmInstalled.crossOverDllOverrides.skipped) {
+            const message = edhmInstalled.crossOverDllOverrides.changed
+              ? 'CrossOver DLL overrides set for EDHM. Restart Elite/CrossOver if Elite was already running.'
+              : 'CrossOver DLL overrides already set for EDHM.';
+            EventBus.emit('RoastMe', { type: 'Success', message });
+          } else if (edhmInstalled.crossOverDllOverrides?.skipped) {
+            EventBus.emit('RoastMe', { type: 'Info', message: edhmInstalled.crossOverDllOverrides.reason });
+          }
           EventBus.emit('RoastMe', { type: 'Success', message: `EDHM ${edhmInstalled.version} Installed.` });
         }        
 
         EventBus.emit('InitializeNavBars', JSON.parse(JSON.stringify(this.settings))); //<- Event Listened at NavBars.vue
         EventBus.emit('OnInitializeThemes', JSON.parse(JSON.stringify(this.settings)));//<- Event Listened at ThemeTab.vue
-        EventBus.emit('InitializeHUDimage', null);    //<- Event Listened at HudImage.vue
+        // ThemeTab will emit ShowThemePreview after selecting the applied/remembered theme.
         EventBus.emit('DoLoadGlobalSettings', null);  //<- Event Listened at GlobalSettingsTab.vue
         EventBus.emit('DoLoadUserSettings', null);    //<- Event Listened at UserSettingsTab.vue
 
@@ -303,7 +320,7 @@ export default {
       try {
         this.themeTemplate = JSON.parse(JSON.stringify(event));
         console.log('Theme Applied: ', this.themeTemplate.credits.theme);        
-        //EventBus.emit('InitializeProperties', JSON.parse(JSON.stringify(this.themeTemplate))); //<- Event Listened at PropertiesTabEx.vue
+        EventBus.emit('InitializeProperties', JSON.parse(JSON.stringify(this.themeTemplate))); //<- Event Listened at PropertiesTabEx.vue
       } catch (error) {
         EventBus.emit('ShowError', error);
       }
@@ -750,8 +767,17 @@ export default {
         const localVersion = await window.api.getAppVersion();
         const serverVersion = latesRelease.version;
         const isUpdate = Util.compareVersions(serverVersion, localVersion); console.log('isUpdate:', isUpdate);
+        const platform = await window.api.getPlatform();
 
         //console.log(latesRelease);
+
+        if (isUpdate && platform !== 'win32' && platform !== 'linux') {
+          // Upstream releases currently publish Windows/Linux installers only.
+          // On macOS/CrossOver PoC builds, showing the normal update prompt every
+          // launch is misleading because there is no downloadable mac artifact.
+          console.log(`Update ${serverVersion} is available, but automatic updates are not supported on ${platform}.`);
+          return;
+        }
 
         if (isUpdate) {
           //Separate the Changelogs from the Install instructions:
@@ -768,7 +794,6 @@ export default {
             cancelId: 0
           };
           let fileSavePath = await window.api.resolveEnvVariables('%LOCALAPPDATA%\\Temp\\EDHM_UI\\edhm-ui-v3-windows-x64.exe');
-          const platform = await window.api.getPlatform();
           var download_url = '';  
 
           window.api.ShowMessageBox(options).then(async result => {

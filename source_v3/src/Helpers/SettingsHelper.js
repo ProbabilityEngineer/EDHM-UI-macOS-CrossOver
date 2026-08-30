@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import fs from 'fs';
 import { readdir, stat } from 'fs/promises';
-import { writeFile, unlink, access } from 'node:fs/promises';
+import { writeFile, unlink, access, rename } from 'node:fs/promises';
 
 import fileHelper from './FileHelper';
 import themeHelper from './ThemeHelper.js';
@@ -15,7 +15,22 @@ import Util from './Utils.js';
 let programSettings = null; // Holds the Program Settings in memory
 
 const defaultSettingsPath = fileHelper.getAssetPath('data/Settings.json');
-var programSettingsPath = fileHelper.resolveEnvVariables('%USERPROFILE%\\EDHM_UI\\Settings.json');
+var programSettingsPath = path.join(fileHelper.getAppDataRoot(), 'Settings.json');
+const EDHM_DLL_FILES = [
+  { enabled: 'd3d11.dll', disabled: 'd3d11.dll.disabled' },
+  { enabled: 'd3dcompiler_47.dll', disabled: 'd3dcompiler_47.dll.disabled' },
+];
+
+const fileExists = async (filePath) => {
+  try {
+    await access(filePath);
+    return true;
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    throw error;
+  }
+};
+
 const InstallationStatus = {
   NEW_SETTINGS: 'newSettings',
   UPGRADING_USER: 'upgradingUser',
@@ -35,15 +50,14 @@ export const initializeSettings = async () => {
     console.log('Initializing Settings...Main');
 
     // Resolve the path to the primary settings file stored in LOCALAPPDATA
-    const primaryPath = fileHelper.resolveEnvVariables(
-      path.join('%LOCALAPPDATA%\\EDHM-UI-V3', 'Settings.json')
-    ); //console.log('primaryPath', primaryPath);
+    const primaryPath = path.join(fileHelper.getAppDataRoot(), 'Settings.json'); //console.log('primaryPath', primaryPath);
 
     // If the primary settings file exists, load it and determine the actual program settings path
     if (fileHelper.checkFileExists(primaryPath)) {
       const PrimarySettings = await fileHelper.loadJsonFile(primaryPath); console.log('PrimarySettings', PrimarySettings);
+      const configuredUserDataFolder = PrimarySettings.UserDataFolder || PrimarySettings.DataFolder || fileHelper.getAppDataRoot();
       programSettingsPath = path.join(
-        fileHelper.resolveEnvVariables(PrimarySettings.DataFolder),
+        fileHelper.resolveEnvVariables(configuredUserDataFolder),
         'Settings.json'
       );
     };
@@ -423,7 +437,7 @@ const getInstanceByName = (InstanceFullName) => {
     if (programSettings != null) {
       const gameInstance = programSettings.GameInstances
         .flatMap(instance => instance.games)
-        .find(game => game.instance === activeInstanceName);
+        .find(game => game.instance === activeInstanceName || game.name === activeInstanceName);
 
       if (!gameInstance) {
         throw new Error('404 - Instance Name Not Found');
@@ -441,7 +455,7 @@ const getInstanceByName = (InstanceFullName) => {
 function GetInstanceDataDirectory(instanceKey) {
   try {
     const ProgramDataPath = fileHelper.resolveEnvVariables(
-      readSetting('UserDataFolder', '%USERPROFILE%\\EDHM_UI') );
+      readSetting('UserDataFolder', fileHelper.getAppDataRoot()) );
     const GameType = instanceKey === 'ED_Odissey' ? 'ODYSS' : 'HORIZ';
     return path.join(ProgramDataPath, GameType);
   } catch (error) {
@@ -453,8 +467,21 @@ function GetInstanceDataDirectory(instanceKey) {
  * @param {*} gamePath full path to the Game Instance */
 async function GetInstalledTPMods(gamePath) {
   try {
+    const results = { mods: [], errors: [], setupNeeded: false, message: '' };
+
+    if (!gamePath) {
+      results.setupNeeded = true;
+      results.message = 'No game folder is configured for this game instance yet.';
+      return results;
+    }
+
     const tpModsFolder = path.join(gamePath, 'EDHM-ini', '3rdPartyMods');
-    const results = { mods: [], errors: [] };
+    if (!fs.existsSync(tpModsFolder)) {
+      results.setupNeeded = true;
+      results.message = '3PMods folder was not found yet. Install EDHM for this game instance first.';
+      return results;
+    }
+
     const files = await readdir(tpModsFolder); 
 
     for (const file of files) {
@@ -522,6 +549,187 @@ async function GetInstalledTPMods(gamePath) {
 
 // #region Mod Installing
 
+async function copyExtractedModFiles(extractedRoot, gamePath, edhmIniTarget, shaderFixesTarget) {
+  const entries = fs.readdirSync(extractedRoot, { withFileTypes: true });
+  let files = 0;
+  let directories = 0;
+
+  for (const entry of entries) {
+    const sourcePath = path.join(extractedRoot, entry.name);
+    const entryName = entry.name.toLowerCase();
+
+    if (entry.isDirectory() && entryName === 'edhm-ini') {
+      const stats = await fileHelper.copyDirectoryRecursive(sourcePath, edhmIniTarget);
+      files += stats.files;
+      directories += stats.directories + 1;
+      continue;
+    }
+
+    if (entry.isDirectory() && entryName === 'shaderfixes') {
+      const stats = await fileHelper.copyDirectoryRecursive(sourcePath, shaderFixesTarget);
+      files += stats.files;
+      directories += stats.directories + 1;
+      continue;
+    }
+
+    const destinationPath = path.join(gamePath, entry.name);
+    if (entry.isDirectory()) {
+      const stats = await fileHelper.copyDirectoryRecursive(sourcePath, destinationPath);
+      files += stats.files;
+      directories += stats.directories + 1;
+    } else if (entry.isFile()) {
+      await fileHelper.copyFile(sourcePath, destinationPath, false);
+      files++;
+    }
+  }
+
+  return { files, directories };
+}
+
+async function installModArchive(edhmZipFile, gamePath, edhmIniTarget, shaderFixesTarget) {
+  if (process.platform !== 'darwin') {
+    return fileHelper.decompressFile(edhmZipFile, gamePath);
+  }
+
+  const tempExtractRoot = fileHelper.ensureDirectoryExists(
+    path.join(fileHelper.getTempRoot(), `edhm-mod-extract-${Date.now()}`)
+  );
+
+  try {
+    await fileHelper.decompressFile(edhmZipFile, tempExtractRoot);
+    const stats = await copyExtractedModFiles(tempExtractRoot, gamePath, edhmIniTarget, shaderFixesTarget);
+    console.log(`Installed extracted mod files: ${stats.files} files, ${stats.directories} directories`);
+    return true;
+  } finally {
+    fs.rmSync(tempExtractRoot, { recursive: true, force: true });
+  }
+}
+
+function getSymlinkAwareDirectoryTarget(folderPath) {
+  if (fs.existsSync(folderPath)) {
+    return fs.realpathSync(folderPath);
+  }
+  return fileHelper.ensureDirectoryExists(folderPath);
+}
+
+async function installTPModArchive(modZipFile, gamePath) {
+  if (process.platform !== 'darwin') {
+    return fileHelper.decompressFile(modZipFile, gamePath);
+  }
+
+  const edhmIniTarget = getSymlinkAwareDirectoryTarget(path.join(gamePath, 'EDHM-ini'));
+  const shaderFixesTarget = getSymlinkAwareDirectoryTarget(path.join(gamePath, 'ShaderFixes'));
+  const tempExtractRoot = fileHelper.ensureDirectoryExists(
+    path.join(fileHelper.getTempRoot(), `edhm-tpmod-extract-${Date.now()}`)
+  );
+
+  try {
+    await fileHelper.decompressFile(modZipFile, tempExtractRoot);
+    const stats = await copyExtractedModFiles(tempExtractRoot, gamePath, edhmIniTarget, shaderFixesTarget);
+    console.log(`Installed extracted TPMod files: ${stats.files} files, ${stats.directories} directories`);
+    return { success: true, ...stats };
+  } finally {
+    fs.rmSync(tempExtractRoot, { recursive: true, force: true });
+  }
+}
+
+const EDHM_CROSSOVER_DLL_OVERRIDES = {
+  d3d11: 'native,builtin',
+  d3dcompiler_47: 'native,builtin',
+};
+
+function getCrossOverBottleRoot(gameInstance) {
+  return gameInstance?.CrossOverBottlePath || programSettings?.CrossOverBottlePath || '';
+}
+
+async function setCrossOverDllOverrides(bottleRoot) {
+  if (process.platform !== 'darwin') {
+    return { skipped: true, changed: false, reason: 'CrossOver DLL overrides are only needed on macOS.' };
+  }
+
+  if (!Util.isNotNullOrEmpty(bottleRoot)) {
+    return { skipped: true, changed: false, reason: 'No CrossOver bottle root configured.' };
+  }
+
+  const userRegPath = path.join(fileHelper.resolveEnvVariables(bottleRoot), 'user.reg');
+  if (!fs.existsSync(userRegPath)) {
+    throw new Error(`CrossOver bottle user.reg not found: ${userRegPath}`);
+  }
+
+  const sectionHeader = '[Software\\\\Wine\\\\DllOverrides]';
+  const original = fs.readFileSync(userRegPath, 'utf8');
+  const hadTrailingNewline = original.endsWith('\n');
+  const lines = original.split(/\r?\n/);
+  if (lines.length > 0 && lines[lines.length - 1] === '') {
+    lines.pop();
+  }
+
+  let sectionIndex = lines.findIndex(line => line.trim().toLowerCase() === sectionHeader.toLowerCase());
+  let changed = false;
+
+  if (sectionIndex === -1) {
+    if (lines.length > 0 && lines[lines.length - 1].trim() !== '') {
+      lines.push('');
+    }
+    lines.push(`${sectionHeader} ${Math.floor(Date.now() / 1000)}`);
+    sectionIndex = lines.length - 1;
+    changed = true;
+  }
+
+  let nextSectionIndex = lines.length;
+  for (let i = sectionIndex + 1; i < lines.length; i++) {
+    if (lines[i].startsWith('[')) {
+      nextSectionIndex = i;
+      break;
+    }
+  }
+
+  for (const [dllName, loadOrder] of Object.entries(EDHM_CROSSOVER_DLL_OVERRIDES)) {
+    const desiredLine = `"${dllName}"="${loadOrder}"`;
+    const prefix = `"${dllName.toLowerCase()}"=`;
+    let foundIndex = -1;
+
+    for (let i = sectionIndex + 1; i < nextSectionIndex; i++) {
+      if (lines[i].toLowerCase().startsWith(prefix)) {
+        foundIndex = i;
+        break;
+      }
+    }
+
+    if (foundIndex >= 0) {
+      if (lines[foundIndex] !== desiredLine) {
+        lines[foundIndex] = desiredLine;
+        changed = true;
+      }
+    } else {
+      lines.splice(nextSectionIndex, 0, desiredLine);
+      nextSectionIndex++;
+      changed = true;
+    }
+  }
+
+  let backupPath = null;
+  if (changed) {
+    const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '-');
+    backupPath = path.join(path.dirname(userRegPath), `user.reg.backup-${timestamp}`);
+    fs.copyFileSync(userRegPath, backupPath);
+    fs.writeFileSync(userRegPath, lines.join('\n') + (hadTrailingNewline ? '\n' : ''), 'utf8');
+  }
+
+  return {
+    skipped: false,
+    changed,
+    bottleRoot: fileHelper.resolveEnvVariables(bottleRoot),
+    userRegPath,
+    backupPath,
+    overrides: EDHM_CROSSOVER_DLL_OVERRIDES,
+  };
+}
+
+async function setCrossOverDllOverridesForInstance(gameInstance) {
+  return setCrossOverDllOverrides(getCrossOverBottleRoot(gameInstance));
+}
+
 /** Installs the Mod and themes in their respective locations
  * @param {*} gameInstance Game instance where to install the mod  */
 async function installEDHMmod(gameInstance) {
@@ -558,14 +766,13 @@ async function installEDHMmod(gameInstance) {
 
     // #region SymLinks
 
-      try {
+    const Symlink_TargetFolder = path.join(userDataPath, GameType, 'EDHM');   
+    const edhmSymLinkTarget = fileHelper.ensureDirectoryExists(path.join(Symlink_TargetFolder, 'EDHM-Ini'));
+    const shaderSymLinkTarget = fileHelper.ensureDirectoryExists(path.join(Symlink_TargetFolder, 'ShaderFixes'));
+
+    try {
       console.log('Checking for Symlinks in Game Path: ', gamePath);
       
-      const Symlink_TargetFolder = path.join(userDataPath, GameType, 'EDHM');   
-
-      const edhmSymLinkTarget = fileHelper.ensureDirectoryExists(path.join(Symlink_TargetFolder, 'EDHM-Ini'));
-      const shaderSymLinkTarget = fileHelper.ensureDirectoryExists(path.join(Symlink_TargetFolder, 'ShaderFixes'));
-
       const SymlinkEdhmIni = await fileHelper.ensureSymlink(edhmSymLinkTarget, path.join(gamePath, 'EDHM-ini'));
       const SymlinkShaders = await fileHelper.ensureSymlink(shaderSymLinkTarget, path.join(gamePath, 'ShaderFixes'));
 
@@ -586,7 +793,16 @@ async function installEDHMmod(gameInstance) {
       const unzipGamePath = gamePath;
       const versionMatch = edhmZipFile.match(/v\d+\.\d+/); 
 
-      const _ret = await fileHelper.decompressFile(edhmZipFile, unzipGamePath);
+      const _ret = await installModArchive(edhmZipFile, unzipGamePath, edhmSymLinkTarget, shaderSymLinkTarget);
+      const installedPair = await Promise.all(
+        EDHM_DLL_FILES.map(({ enabled }) => fileExists(path.join(gamePath, enabled)))
+      );
+      if (_ret && installedPair.every(Boolean)) {
+        for (const { disabled } of EDHM_DLL_FILES) {
+          const disabledPath = path.join(gamePath, disabled);
+          if (await fileExists(disabledPath)) await unlink(disabledPath);
+        }
+      }
 
       Response.game = GameType;
       Response.version = versionMatch[0];
@@ -621,6 +837,15 @@ async function installEDHMmod(gameInstance) {
     await fileHelper.copyFile(_Source, _Destiny, false);
 
     // #endregion
+
+    Response.crossOverDllOverrides = await setCrossOverDllOverridesForInstance(gameInstance);
+    if (Response.crossOverDllOverrides?.skipped) {
+      console.log('CrossOver DLL overrides skipped:', Response.crossOverDllOverrides.reason);
+    } else if (Response.crossOverDllOverrides?.changed) {
+      console.log('CrossOver DLL overrides updated:', Response.crossOverDllOverrides.userRegPath);
+    } else {
+      console.log('CrossOver DLL overrides already configured:', Response.crossOverDllOverrides.userRegPath);
+    }
 
     console.log(`------ EDHM ${Response.version} Installed! ------`);
   } catch (error) {
@@ -670,6 +895,8 @@ async function UninstallEDHMmod(gameInstance) {
       'd3d11.dll',
       'd3dcompiler_46.dll',
       'd3dcompiler_47.dll',
+      'd3dcompiler_47.dll.disabled',
+      'd3d11.dll.disabled',
       'nvapi64.dll',
       'EDHM-Uninstall.bat',
     ];
@@ -689,7 +916,7 @@ async function UninstallEDHMmod(gameInstance) {
     }
 
     // Also delete the files from the extra path:
-    fileHelper.deleteFolderRecursive(fileHelper.resolveEnvVariables('%USERPROFILE%\\EDHM_UI\\ODYSS\\EDHM'));
+    fileHelper.deleteFolderRecursive(path.join(fileHelper.getAppDataRoot(), 'ODYSS', 'EDHM'));
 
   } catch (error) {
     console.error('Error during uninstallation:', error);
@@ -699,8 +926,64 @@ async function UninstallEDHMmod(gameInstance) {
   return fileDeleted;
 };
 
-async function DisableEDHMmod(gameInstance) {
-  throw new Error("Not implemented yet!");  
+/** Return EDHM's enabled, disabled, or not-installed state. */
+async function GetEDHMStatus(gameInstance) {
+  const configuredPath = Array.isArray(gameInstance?.path) ? gameInstance.path[0] : gameInstance?.path;
+  if (!configuredPath) return { state: 'not_installed', conflict: false };
+
+  const gamePath = path.resolve(fileHelper.resolveEnvVariables(configuredPath));
+  const states = await Promise.all(EDHM_DLL_FILES.map(async ({ enabled, disabled }) => ({
+    enabledExists: await fileExists(path.join(gamePath, enabled)),
+    disabledExists: await fileExists(path.join(gamePath, disabled)),
+  })));
+  const anyDll = states.some(state => state.enabledExists || state.disabledExists);
+  if (!anyDll) return { state: 'not_installed', conflict: false, gamePath };
+
+  const hasDuplicate = states.some(state => state.enabledExists && state.disabledExists);
+  const hasMissing = states.some(state => !state.enabledExists && !state.disabledExists);
+  const anyDisabled = states.some(state => state.disabledExists);
+  if (hasDuplicate || hasMissing) {
+    return { state: anyDisabled ? 'disabled' : 'ready', conflict: true, gamePath };
+  }
+  return { state: anyDisabled ? 'disabled' : 'ready', conflict: false, gamePath };
+}
+
+/** Toggle both EDHM proxy DLLs, rolling back if the second rename fails. */
+async function ToggleEDHMmod(gameInstance) {
+  const status = await GetEDHMStatus(gameInstance);
+  if (status.state === 'not_installed') return { ...status, changed: false };
+  if (status.conflict) {
+    throw new Error('The EDHM DLL files are incomplete or duplicated. Reinstall EDHM or correct the files before toggling it.');
+  }
+  if (fileHelper.isProcessRunning('EliteDangerous64.exe')) {
+    throw new Error('Elite Dangerous is currently running. Close the game before enabling or disabling EDHM.');
+  }
+
+  const disabling = status.state === 'ready';
+  const pairs = [];
+  for (const { enabled, disabled } of EDHM_DLL_FILES) {
+    const enabledPath = path.join(status.gamePath, enabled);
+    const disabledPath = path.join(status.gamePath, disabled);
+    pairs.push({
+      sourcePath: disabling ? enabledPath : disabledPath,
+      destinationPath: disabling ? disabledPath : enabledPath,
+    });
+  }
+
+  const completed = [];
+  try {
+    for (const pair of pairs) {
+      await rename(pair.sourcePath, pair.destinationPath);
+      completed.push(pair);
+    }
+  } catch (error) {
+    for (const pair of completed.reverse()) {
+      try { await rename(pair.destinationPath, pair.sourcePath); } catch {}
+    }
+    const action = disabling ? 'disable' : 'enable';
+    throw new Error(`Unable to ${action} EDHM: ${error.message}. Ensure Elite Dangerous is not running and that the game folder is writable.`);
+  }
+  return { ...(await GetEDHMStatus(gameInstance)), changed: true };
 }
 
 /** This are actions to be run after an App Update is applied and Before EDHM mod is installed. */
@@ -711,7 +994,7 @@ async function DoHotFix() {
       const hotFix = fileHelper.loadJsonFile(hotfixJsonPath);
       if (hotFix) {
         console.log('------ Applying HotFixes --------');
-        const AppExePath = fileHelper.resolveEnvVariables('%LOCALAPPDATA%\\EDHM-UI-V3');
+        const AppExePath = fileHelper.getAppDataRoot();
         const UI_DOCUMENTS = programSettings.UserDataFolder; // fileHelper.resolveEnvVariables('%USERPROFILE%\\EDHM_UI');
         const GameInstances = readSetting('GameInstances');
 
@@ -922,7 +1205,7 @@ async function ApplyTheme(themeName) {
 ipcMain.handle('GetAppDataDirectory', (event) => {
   try {
     return fileHelper.resolveEnvVariables(
-      readSetting('UserDataFolder', '%USERPROFILE%\\EDHM_UI')
+      readSetting('UserDataFolder', fileHelper.getAppDataRoot())
     );
   } catch (error) {
     throw new Error(error.message + error.stack);
@@ -1073,6 +1356,20 @@ ipcMain.handle('installEDHMmod', (event, gameInstance) => {
     throw new Error(error.message + error.stack);
   }
 });
+ipcMain.handle('installTPModArchive', (event, modZipFile, gamePath) => {
+  try {
+    return installTPModArchive(modZipFile, gamePath);
+  } catch (error) {
+    throw new Error(error.message + error.stack);
+  }
+});
+ipcMain.handle('setCrossOverDllOverrides', (event, bottleRoot) => {
+  try {
+    return setCrossOverDllOverrides(bottleRoot);
+  } catch (error) {
+    throw new Error(error.message + error.stack);
+  }
+});
 ipcMain.handle('CheckEDHMinstalled', (event, gamePath) => {
   try {
     return CheckEDHMinstalled(gamePath);
@@ -1087,12 +1384,17 @@ ipcMain.handle('UninstallEDHMmod', (event, gameInstance) => {
     throw new Error(error.message + error.stack);
   }
 });
-ipcMain.handle('DisableEDHMmod', (event, gameInstance) => {
-  try {
-    return DisableEDHMmod(gameInstance);
-  } catch (error) {
-    throw new Error(error.message + error.stack);
-  }
+ipcMain.handle('GetEDHMStatus', async (event, gameInstance) => {
+  try { return await GetEDHMStatus(gameInstance); }
+  catch (error) { throw new Error(error.message); }
+});
+ipcMain.handle('ToggleEDHMmod', async (event, gameInstance) => {
+  try { return await ToggleEDHMmod(gameInstance); }
+  catch (error) { throw new Error(error.message); }
+});
+ipcMain.handle('DisableEDHMmod', async (event, gameInstance) => {
+  try { return await ToggleEDHMmod(gameInstance); }
+  catch (error) { throw new Error(error.message); }
 });
 
 ipcMain.handle('readSetting', (event, key, defaultValue = null) => {
@@ -1123,7 +1425,8 @@ ipcMain.handle('DoHotFix', async (event) => {
 
 export default { 
   initializeSettings, loadSettings, saveSettings, 
-  installEDHMmod, CheckEDHMinstalled, 
+  installEDHMmod, CheckEDHMinstalled, setCrossOverDllOverrides, installTPModArchive,
+  GetEDHMStatus, ToggleEDHMmod,
   getInstanceByName, getActiveInstance, getActiveInstanceEx,
   GetInstanceDataDirectory,
   LoadGlobalSettings, saveGlobalSettings,

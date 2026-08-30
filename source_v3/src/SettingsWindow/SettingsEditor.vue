@@ -71,7 +71,7 @@
                     </div>
                     <div class="card-body">
                         <div class="row">
-                            <div class="col">
+                            <div class="col-12">
                                 <label for="playerJournal">Player's Journal Location:</label>
                                 <div id="playerJournal" class="input-group mb-3">
                                     <input type="text" class="form-control form-control-sm"
@@ -86,62 +86,48 @@
                         </div>
 
                         <div class="row">
-                            <div class="col">
-                                <label for="quantity">Saves To Remember:</label>
-                                <input type="number" class="form-control" id="quantity" min="1" max="50"
-                                    v-model="config.SavesToRemember" />
-                            </div>
-                            <div class="col">
-                                <label for="userDataLocation">Themes & User's Data:</label>
-                                <div id="userDataLocation" class="input-group mb-3" disabled>
+                            <div class="col-12">
+                                <label for="crossOverBottlePath">Bottle Root:</label>
+                                <div id="crossOverBottlePath" class="input-group mb-2">
                                     <input type="text" class="form-control form-control-sm"
-                                        placeholder="Pick a Location" aria-label="Pick a Location"
-                                        aria-describedby="button-addon2" v-model="config.UserDataFolder" />
-                                    <button class="btn btn-outline-secondary" type="button" id="button-addon2"
-                                        @click="browseUserDataFolder">
+                                        placeholder="Pick the bottle folder that contains drive_c" aria-label="Pick a Location"
+                                        aria-describedby="button-addon-bottle" v-model="config.CrossOverBottlePath" />
+                                    <button class="btn btn-outline-secondary" type="button" id="button-addon-bottle"
+                                        @click="browseBottleFolder">
                                         Browse
+                                    </button>
+                                </div>
+                                <div class="mb-3">
+                                    <button class="btn btn-outline-info btn-sm" type="button" @click="runCrossOverDllOverrides">
+                                        Set EDHM DLL Overrides
                                     </button>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Custom Icon + Tray Options + Preview -->
                         <div class="row">
-                            <!-- Columna izquierda: Custom Icon input -->
-                            <div class="col">
-                                <label for="customIconPath">Custom Icon:</label>
-                                <div id="customIconPath" class="input-group mb-3" disabled>
+                            <div class="col-12">
+                                <label for="playerConfigFolder">Graphics Config XML Folder:</label>
+                                <div id="playerConfigFolder" class="input-group mb-3">
                                     <input type="text" class="form-control form-control-sm"
-                                        placeholder="Pick a Location" aria-label="Pick a Location"
-                                        aria-describedby="button-addon4" v-model="config.CustomIcon" />
-                                    <button class="btn btn-outline-secondary" type="button" id="button-addon4"
-                                        @click="browseCustomIcon">
+                                        placeholder="Pick the folder containing GraphicsConfiguration*.xml" aria-label="Pick a Location"
+                                        aria-describedby="button-addon-config" v-model="config.PlayerConfigFolder" />
+                                    <button class="btn btn-outline-secondary" type="button" id="button-addon-config"
+                                        @click="browseConfigFolder">
                                         Browse
                                     </button>
                                 </div>
                             </div>
+                        </div>
 
-                            <!-- Columna derecha: switches + preview -->
-                            <div class="col d-flex flex-column align-items-start">
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" role="switch"
-                                        id="flexSwitchCheckTray" v-model="config.HideToTray" />
-                                    <label class="form-check-label" for="flexSwitchCheckTray">
-                                        Hide to Tray on close
-                                    </label>
-                                </div>
-
-                                <div class="form-check form-switch mb-2">
-                                    <input class="form-check-input" type="checkbox" role="switch"
-                                        id="flexSwitchStartMinimized" v-model="config.StartMinimizedToTray" />
-                                    <label class="form-check-label" for="flexSwitchStartMinimized">
-                                        Start minimized to Tray
-                                    </label>
-                                </div>
-
-                                <img :src="config.CustomIcon" class="img-thumbnail" alt="..." width="64" height="64" />
+                        <div class="row">
+                            <div class="col-auto">
+                                <label for="quantity">Number of Themes to Save:</label>
+                                <input type="number" class="form-control form-control-sm" id="quantity" min="1" max="999" step="1"
+                                    inputmode="numeric" style="max-width: 5rem;" v-model="config.SavesToRemember" />
                             </div>
                         </div>
+
                     </div>
                 </div>
 
@@ -149,7 +135,7 @@
                 <div class="mt-4">
                     <div class="btn-group" role="group" aria-label="Default button group">
                         <button type="button" class="btn btn-outline-secondary" @click="CleanInstall">
-                            Clean Install
+                            Reset
                         </button>
                         <button type="button" class="btn btn-success" @click="runGameLocationAssistant">
                             Game Localization Wizard
@@ -180,6 +166,7 @@
                                 <option value="Vulkan">Vulkan</option>
                                 <option value="OpenGL">OpenGL</option>
                                 <option value="Direct3D">Direct3D</option>
+                                <option value="dxmt">dxmt</option>
                             </select>
                         </div>
 
@@ -264,8 +251,8 @@ export default {
                 if (this.config) {
                     console.log('Settings Loaded:', this.config);
                     // Ensure Default Values are set:
-                    if (!this.config.CustomIcon) {
-                        this.config.CustomIcon = await window.api.getAssetPath('images/Icon_v3_a0.ico');
+                    if (typeof this.config.CrossOverBottlePath === 'undefined') {
+                        this.config.CrossOverBottlePath = '';
                     }
                     this.DATA_DIRECTORY = await window.api.resolveEnvVariables(this.config.UserDataFolder); //console.log('DATA_DIRECTORY:', DATA_DIRECTORY);
 
@@ -277,6 +264,9 @@ export default {
                     console.log('ActiveInstance:', instanceName);
 
                     this.selectedGamePath = this.ActiveInstance.path;
+                    if (!this.config.CrossOverBottlePath) {
+                        this.config.CrossOverBottlePath = this.inferBottleRootFromPath(this.selectedGamePath);
+                    }
                     this.selectedVersion = this.getGameVersionIndex(this.ActiveInstance.name);
                     this.selectedPublisher = this.getGameInstanceIndex(pubName);
                     this.publishers = this.config.GameInstances;
@@ -353,11 +343,6 @@ export default {
             this.config.ActiveInstance = this.config.GameInstances[this.selectedPublisher].games[this.selectedVersion].instance;
 
             console.log('ActiveInstance:', this.config.ActiveInstance);
-            try {
-                await window.api.terminateProgram('EliteDangerous64.exe');
-            } catch (error) {
-                console.error('Error:', error);
-            }
         },
 
         onUiScaleChange() {
@@ -381,6 +366,36 @@ export default {
                 default: return -1;
             }
         },
+        inferPublisherIndexFromPath(gamePath) {
+            const normalizedPath = (gamePath || '').toLowerCase();
+            if (normalizedPath.includes('steamapps')) return this.getGameInstanceIndex('Steam');
+            if (normalizedPath.includes('epic games') || normalizedPath.includes('epicgames')) return this.getGameInstanceIndex('Epic Games');
+            if (normalizedPath.includes('frontier') || normalizedPath.includes('edlaunch')) return this.getGameInstanceIndex('Frontier');
+            return -1;
+        },
+        inferBottleRootFromPath(hostPath) {
+            if (!hostPath) return '';
+            const normalizedPath = hostPath.replace(/\\/g, '/');
+            const driveCMarker = '/drive_c/';
+            const driveCIndex = normalizedPath.toLowerCase().indexOf(driveCMarker);
+            if (driveCIndex < 0) return '';
+            return normalizedPath.slice(0, driveCIndex);
+        },
+        async applyInferredBottlePaths(bottleRoot) {
+            if (!bottleRoot) return;
+            const inferredPaths = await window.api.getBottlePaths(bottleRoot);
+            const isDefaultJournal = !this.config.PlayerJournal || this.config.PlayerJournal.includes('%USERPROFILE%');
+            const isDefaultConfigFolder = !this.config.PlayerConfigFolder || this.config.PlayerConfigFolder.includes('%USERPROFILE%');
+            if (!this.config.CrossOverBottlePath && inferredPaths.bottleRoot) {
+                this.config.CrossOverBottlePath = inferredPaths.bottleRoot;
+            }
+            if (isDefaultJournal && inferredPaths.playerJournal) {
+                this.config.PlayerJournal = inferredPaths.playerJournal;
+            }
+            if (isDefaultConfigFolder && inferredPaths.playerConfigFolder) {
+                this.config.PlayerConfigFolder = inferredPaths.playerConfigFolder;
+            }
+        },
 
         /* Manually Browse for the Game Executable */
         async browseGamePath(params) {
@@ -397,7 +412,7 @@ export default {
                     { name: 'Game Executable', extensions: ['exe'] }
                 ],
                 properties: ['openFile', 'showHiddenFiles', 'dontAddToRecent'],
-                message: 'Select the Game Executable',
+                message: 'Select the EliteDangerous64.exe location. On mac/CrossOver this is inside the bottle drive_c path.',
             };
 
             const filePath = await window.api.ShowOpenDialog(options);
@@ -406,41 +421,22 @@ export default {
                 const selectedFile = filePath[0];
                 const parentFolder = await window.api.getParentFolder(selectedFile);
                 this.selectedGamePath = parentFolder;
+                const inferredBottleRoot = this.inferBottleRootFromPath(selectedFile) || this.inferBottleRootFromPath(parentFolder);
+                if (!this.config.CrossOverBottlePath) {
+                    this.config.CrossOverBottlePath = inferredBottleRoot;
+                }
 
+                await this.applyInferredBottlePaths(this.config.CrossOverBottlePath || inferredBottleRoot);
                 this.OnGamePathChange(null); // Trigger the change event to update the config
+                if (!this.config.PlayerJournal) {
+                    await this.browseJournalFolder();
+                }
+                if (!this.config.PlayerConfigFolder) {
+                    await this.browseConfigFolder();
+                }
 
             } else {
                 console.log('[GamePath] No file selected.');
-            }
-        },
-        /* Browse for the location to store User's data and Themes */
-        async browseUserDataFolder() {
-            try {
-                const DATA_DIRECTORY = await window.api.resolveEnvVariables(this.config.UserDataFolder); //<- %USERPROFILE%\EDHM_UI
-                const options = {
-                    title: 'Select Where to Store User Data',
-                    defaultPath: DATA_DIRECTORY,
-                    properties: ['openDirectory', 'createDirectory', 'promptToCreate', 'dontAddToRecent'],
-                    message: 'Select Where to Store User Data',
-                };
-                const filePath = await window.api.ShowOpenDialog(options);
-                if (filePath) {
-                    this.config.UserDataFolder = filePath[0];
-                    if (DATA_DIRECTORY != this.config.UserDataFolder) {
-                        const PrimeSettings = { DataFolder: this.config.UserDataFolder };
-                        const primaryPath = await window.api.resolveEnvVariables('%LOCALAPPDATA%\\EDHM-UI-V3');
-                        await window.api.ensureDirectoryExists(primaryPath);
-                        await window.api.writeJsonFile(window.api.joinPath(primaryPath, 'Settings.json'), PrimeSettings, true);
-                        await window.api.copyDirectory(DATA_DIRECTORY, this.config.UserDataFolder);
-                        if (await window.api.fileExists(window.api.joinPath(this.config.UserDataFolder, 'Settings.json'))) {
-                            console.log('Primary Settings updated at:', this.config.UserDataFolder);
-                        }
-                        window.api.events.sendEvent('RoastMe', { type: 'Info', message: 'You might want to restart the App for changes to take effect.', delay: 10000 });
-                    }
-                }
-            } catch (error) {
-                console.error('Error browsing user data folder:', error);
-                window.api.events.sendEvent('ShowError', error);
             }
         },
         /* Browse for the location where the ED Player Journal is located */
@@ -454,7 +450,7 @@ export default {
                 title: 'Select Where Game Stores Journal Files',
                 defaultPath: defaultLocation,
                 properties: ['openDirectory', 'createDirectory', 'promptToCreate', 'dontAddToRecent'],
-                message: 'Select Where Game Stores Journal Files',
+                message: 'Select the folder containing Journal.*.log files',
                 filters: null // No specific filters for directories
             };
             const filePath = await window.api.ShowOpenDialog(options);
@@ -462,21 +458,62 @@ export default {
                 this.config.PlayerJournal = filePath[0];
             }
         },
-
-        /* Browse for the location of a Custom Icon for the App */
-        async browseCustomIcon() {
-            //const DefaultLocation = await window.api.getAssetPath('images/Icon_v3_a0.ico');
-            const DATA_DIRECTORY = await window.api.resolveEnvVariables(this.config.UserDataFolder); //console.log('DATA_DIRECTORY:', DATA_DIRECTORY);
-            const DefaultLocation = window.api.joinPath(DATA_DIRECTORY, 'images');//console.log('DefaultLocation:', DefaultLocation);
+        async browseBottleFolder() {
+            const defaultLocation = this.config.CrossOverBottlePath || await window.api.resolveEnvVariables('%USERPROFILE%');
             const options = {
-                title: 'Select a Custom Icon',
-                defaultPath: DefaultLocation,
-                properties: ['openFile', 'showHiddenFiles', 'createDirectory', 'dontAddToRecent'],
-                message: 'Select a Custom Icon',
+                title: 'Select CrossOver Bottle Root',
+                defaultPath: defaultLocation,
+                properties: ['openDirectory', 'createDirectory', 'promptToCreate', 'dontAddToRecent'],
+                message: 'Select the CrossOver bottle folder that contains drive_c',
+                filters: null
             };
             const filePath = await window.api.ShowOpenDialog(options);
             if (filePath) {
-                this.config.CustomIcon = filePath[0];
+                this.config.CrossOverBottlePath = filePath[0];
+            }
+        },
+        async runCrossOverDllOverrides() {
+            try {
+                if (!this.config.CrossOverBottlePath) {
+                    await window.api.ShowMessageBox({
+                        type: 'warning',
+                        buttons: ['OK'],
+                        title: 'Bottle Root Required',
+                        message: 'Select a CrossOver Bottle Root first.',
+                        detail: 'The bottle root is the folder that contains drive_c and user.reg.'
+                    });
+                    return;
+                }
+
+                const result = await window.api.setCrossOverDllOverrides(this.config.CrossOverBottlePath);
+                await window.api.ShowMessageBox({
+                    type: result.changed ? 'info' : 'none',
+                    buttons: ['OK'],
+                    title: 'EDHM DLL Overrides',
+                    message: result.changed ? 'CrossOver DLL overrides were updated.' : 'CrossOver DLL overrides are already set.',
+                    detail: result.changed
+                        ? `Updated ${result.userRegPath}\nBackup: ${result.backupPath}\n\nRestart CrossOver/Elite if it was already running.`
+                        : `Bottle: ${result.bottleRoot}\n\nd3d11 and d3dcompiler_47 are set to native,builtin.`
+                });
+            } catch (error) {
+                console.log(error);
+            }
+        },
+        async browseConfigFolder() {
+            var defaultLocation = this.config.PlayerConfigFolder ? this.config.PlayerConfigFolder :
+                '%USERPROFILE%\\AppData\\Local\\Frontier Developments\\Elite Dangerous\\Options\\Graphics';
+            defaultLocation = await window.api.resolveEnvVariables(defaultLocation);
+
+            const options = {
+                title: 'Select Graphics Config XML Folder',
+                defaultPath: defaultLocation,
+                properties: ['openDirectory', 'createDirectory', 'promptToCreate', 'dontAddToRecent'],
+                message: 'Select the folder containing GraphicsConfiguration.xml and/or GraphicsConfigurationOverride.xml\nWindows default: %USERPROFILE%\\AppData\\Local\\Frontier Developments\\Elite Dangerous\\Options\\Graphics',
+                filters: null
+            };
+            const filePath = await window.api.ShowOpenDialog(options);
+            if (filePath) {
+                this.config.PlayerConfigFolder = filePath[0];
             }
         },
 
@@ -485,82 +522,123 @@ export default {
             return id.replace(/\s/g, '');
         },
         async InstallGameInstance(FolderPath) {
-            try {
-                await window.api.terminateProgram('EliteDangerous64.exe');
-            } catch { }
+            return FolderPath;
         },
 
         /* Attempts to Detect the running Game Process and then sets the Paths */
         async runGameLocationAssistant() {
-            window.api.events.sendEvent('RoastMe', { type: 'Info', message: 'Waiting for Game to Start...<br>Leave the game running at menus and return here.', delay: 10000, autoHide: false });
+            const intro = await window.api.ShowMessageBox({
+                type: 'info',
+                buttons: ['Cancel', 'Continue'],
+                defaultId: 1,
+                cancelId: 0,
+                title: 'Game Localization Wizard',
+                message: 'This button detects the EliteDangerous64.exe location from a running Elite process.',
+                detail: 'Before continuing, launch Elite Dangerous and leave it sitting at the main menu. The wizard will read the running game path and may need to close Elite before later file changes are applied.'
+            });
 
-            // 1. Check if the Game is already Running:
+            if (intro.response !== 1) {
+                return;
+            }
+
             const fullPath = await window.api.detectProgram('EliteDangerous64.exe');
 
-            if (fullPath) {
-                console.log('Process found at:', fullPath);
-                window.api.events.sendEvent('RoastMe', { type: 'Success', message: `Process found!<br>Game will now Close<br>Don't Panic..` });
-
-                await window.api.terminateProgram('EliteDangerous64.exe');
-                const FolderPath = await window.api.getParentFolder(fullPath);
-
-                this.selectedGamePath = FolderPath; console.log('selectedGamePath', this.selectedGamePath);
-                console.log('Selected Game Path:', this.selectedGamePath);
-
-                this.config.GameInstances[this.selectedPublisher].games[this.selectedVersion].path = this.selectedGamePath;
-                this.config.ActiveInstance = this.config.GameInstances[this.selectedPublisher].games[this.selectedVersion].instance;
-
-                console.log('ActiveInstance:', this.config.ActiveInstance);
-                this.InstallGameInstance(this.selectedGamePath);
-
-            } else {
-                console.log('Process not found.');
-                window.api.events.sendEvent('RoastMe', { type: 'Info', message: 'Waiting for Game to Start...<br>Leave the game running at menus and return here.' });
-
-                window.api.startMonitoring('EliteDangerous64.exe');
-
-                // Event listener for program detection
-                window.api.onProgramDetected(async (event, exePath) => {
-                    console.log(`Executable Path: ${exePath}`);
-                    window.api.events.sendEvent('RoastMe', { type: 'Success', message: `Process found!<br>Game will now Close<br>Don't Panic..` });
-
-                    await window.api.terminateProgram('EliteDangerous64.exe');
-                    const FolderPath = await window.api.getParentFolder(exePath);
-
-                    //this.addNewGameInstance(String(FolderPath));
-                    this.selectedGamePath = FolderPath; console.log(this.selectedGamePath);
-                    console.log('Selected Game Path:', this.selectedGamePath);
-
-                    this.config.GameInstances[this.selectedPublisher].games[this.selectedVersion].path = this.selectedGamePath;
-                    this.config.ActiveInstance = this.config.GameInstances[this.selectedPublisher].games[this.selectedVersion].instance;
-
-                    console.log('ActiveInstance:', this.config.ActiveInstance);
-                    this.InstallGameInstance(this.selectedGamePath);
+            if (!fullPath) {
+                await window.api.ShowMessageBox({
+                    type: 'warning',
+                    buttons: ['OK'],
+                    defaultId: 0,
+                    title: 'Elite Not Detected',
+                    message: 'Elite Dangerous was not detected.',
+                    detail: 'Launch Elite Dangerous, leave it at the main menu, then click the green button again.'
                 });
+                return;
             }
+
+            console.log('Process found at:', fullPath);
+            const translatedPath = await window.api.translateWindowsPath(fullPath);
+            const hostExecutablePath = translatedPath && translatedPath !== fullPath ? translatedPath : fullPath;
+            const FolderPath = await window.api.getParentFolder(hostExecutablePath);
+            this.selectedGamePath = FolderPath; console.log('selectedGamePath', this.selectedGamePath);
+            console.log('Selected Game Path:', this.selectedGamePath);
+            const inferredBottleRoot = this.inferBottleRootFromPath(hostExecutablePath) || this.inferBottleRootFromPath(FolderPath) || this.inferBottleRootFromPath(fullPath);
+            if (!this.config.CrossOverBottlePath) {
+                this.config.CrossOverBottlePath = inferredBottleRoot;
+            }
+            await this.applyInferredBottlePaths(this.config.CrossOverBottlePath || inferredBottleRoot);
+            if (this.config.CrossOverBottlePath) {
+                const overrideResult = await window.api.ShowMessageBox({
+                    type: 'question',
+                    buttons: ['Not Now', 'Set EDHM DLL Overrides'],
+                    defaultId: 1,
+                    cancelId: 0,
+                    title: 'CrossOver Bottle Detected',
+                    message: 'Set the EDHM CrossOver DLL overrides for this bottle?',
+                    detail: 'EDHM needs d3d11 and d3dcompiler_47 set to native,builtin in CrossOver. You can also run this later from the Bottle Root row.'
+                });
+                if (overrideResult.response === 1) {
+                    await this.runCrossOverDllOverrides();
+                }
+            }
+
+            const inferredPublisherIndex = this.inferPublisherIndexFromPath(FolderPath);
+            if (inferredPublisherIndex >= 0) {
+                this.selectedPublisher = inferredPublisherIndex;
+                this.loadVersions();
+            }
+
+            this.config.GameInstances[this.selectedPublisher].games[this.selectedVersion].path = this.selectedGamePath;
+            this.config.ActiveInstance = this.config.GameInstances[this.selectedPublisher].games[this.selectedVersion].instance;
+            console.log('ActiveInstance:', this.config.ActiveInstance);
+
+            const closeResult = await window.api.ShowMessageBox({
+                type: 'question',
+                buttons: ['Leave Elite Running', 'Close Elite Now'],
+                defaultId: 1,
+                cancelId: 0,
+                title: 'Game Path Detected',
+                message: 'Elite was detected and the game folder was populated.',
+                detail: `Detected folder:\n${FolderPath}\n\nClose Elite now if you want the app to continue with game-file changes more safely. Otherwise you can leave Elite running and close it yourself before applying changes.`
+            });
+
+            if (closeResult.response === 1) {
+                await window.api.terminateProgram('EliteDangerous64.exe');
+            }
+
+            this.InstallGameInstance(this.selectedGamePath);
         },
 
-        /** Button Click: Clean Install
-         * Deletes the Settings File for a Clean Install         */
+        /** Button Click: Reset
+         * Deletes the current settings file and the primary pointer file so the app starts fresh. */
         async CleanInstall() {
             try {
                 const options = {
-                    type: 'warning', //<- none, info, error, question, warning
-                    buttons: ['Cancel', "Yes, I'm Sure", 'No! i was just checking what this button does..'],
+                    type: 'warning',
+                    buttons: ['Cancel', 'Reset & Relaunch'],
                     defaultId: 1,
-                    title: 'Question',
-                    message: 'Do you want to proceed?',
-                    detail: "This will wipe all the settings to their default state.",
+                    title: 'Reset Settings',
+                    message: 'Reset EDHM-UI settings?',
+                    detail: 'This deletes the current EDHM-UI settings and path selections, then restarts the app automatically.',
                     cancelId: 0,
                 };
                 const result = await window.api.ShowMessageBox(options); console.log(result);
                 if (result.response === 1) {
-                    const FilePath = await window.api.joinPath(this.config.UserDataFolder, 'Settings.json');
-                    const ResolvedPath = await window.api.resolveEnvVariables(FilePath);
-                    const _ret = await window.api.deleteFileByAbsolutePath(ResolvedPath);
-                    if (_ret) {
-                        window.api.events.sendEvent('RoastMe', { type: 'Success', message: 'EDHM Settings got wiped!<br>You should re-start the App now.' });
+                    const settingsFilePath = await window.api.resolveEnvVariables(await window.api.joinPath(this.config.UserDataFolder, 'Settings.json'));
+                    const primarySettingsFilePath = await window.api.resolveEnvVariables('%EDHM_APPDATA%/Settings.json');
+                    let deletedSomething = false;
+
+                    if (await window.api.fileExists(settingsFilePath)) {
+                        deletedSomething = await window.api.deleteFileByAbsolutePath(settingsFilePath) || deletedSomething;
                     }
+                    if (await window.api.fileExists(primarySettingsFilePath)) {
+                        deletedSomething = await window.api.deleteFileByAbsolutePath(primarySettingsFilePath) || deletedSomething;
+                    }
+
+                    this.config.PlayerJournal = '';
+                    this.config.PlayerConfigFolder = '';
+                    this.config.CrossOverBottlePath = '';
+                    this.selectedGamePath = '';
+                    await window.api.restartProgram();
                 }
             } catch (error) {
                 window.api.events.sendEvent('ShowError', error);
@@ -575,10 +653,10 @@ export default {
             } else {
                 // FRESH INSTALL:
                 this.config = await window.api.getDefaultSettings();
+                if (typeof this.config.CrossOverBottlePath === 'undefined') {
+                    this.config.CrossOverBottlePath = '';
+                }
                 this.Initialize();
-                setTimeout(() => {
-                    window.api.events.sendEvent('RoastMe', { type: 'Info', message: 'You can do it manually in the Game Instances..<br> or just click the Green Button.', delay: 10000 });
-                }, 2000);
             }
             
             if (typeof this.config.UiScaleFactor === 'undefined') {

@@ -9,7 +9,7 @@ const LOG_TYPES = {
   WARNING: 'WARNING',
 };
 
-const logPath = fileHelper.resolveEnvVariables('%USERPROFILE%\\EDHM_UI\\Errorlog.txt');
+const logPath = path.join(fileHelper.getAppDataRoot(), 'Errorlog.txt');
 //const logPath = path.join(app.getPath('appData'), 'edhm-ui', 'log.txt');
 const logDirectory = path.dirname(logPath); 
 

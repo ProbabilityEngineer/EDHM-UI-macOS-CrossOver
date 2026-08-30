@@ -1,5 +1,7 @@
 import { app, Menu, BrowserWindow, globalShortcut, ipcMain, shell, Tray, screen  } from 'electron';
 import path from 'node:path';
+import fs from 'node:fs';
+import { spawn, execSync } from 'node:child_process';
 import started from 'electron-squirrel-startup';
 import fileHelper from './Helpers/FileHelper.js';
 import themeHelper from './Helpers/ThemeHelper.js';
@@ -14,11 +16,38 @@ if (started) { app.quit(); } //<- This is a Squirrel event, so we quit the app
 let mainWindow;
 let tray;
 let BalloonShown = false;
-let HideToTray = false;
 let StartMinimizedToTray = false;
 let shipyard;
 let CustomIcon;
 let programSettings;
+const windowStatePath = () => path.join(fileHelper.getAppDataRoot(), 'WindowState.json');
+
+function loadWindowState() {
+  try {
+    const statePath = windowStatePath();
+    if (!fs.existsSync(statePath)) return {};
+    return JSON.parse(fs.readFileSync(statePath, 'utf8'));
+  } catch (error) {
+    console.warn('Unable to load window state:', error.message);
+    return {};
+  }
+}
+
+function saveWindowState(win) {
+  try {
+    if (!win || win.isDestroyed()) return;
+    const bounds = win.getBounds();
+    fs.mkdirSync(path.dirname(windowStatePath()), { recursive: true });
+    fs.writeFileSync(windowStatePath(), JSON.stringify({
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+    }, null, 2));
+  } catch (error) {
+    console.warn('Unable to save window state:', error.message);
+  }
+}
 
 
 //- Check for Single Instance:
@@ -38,6 +67,27 @@ if (!gotTheLock) {
   Start();
 }
 
+function isWindowsWineLikeRuntime() {
+  if (process.platform !== 'win32') return false;
+
+  const wineEnvHints = ['WINEPREFIX', 'WINELOADER', 'WINELOADERNOEXEC', 'CX_BOTTLE', 'CX_ROOT'];
+  if (wineEnvHints.some(name => !!process.env[name])) {
+    return true;
+  }
+
+  try {
+    execSync('reg query "HKCU\\Software\\Wine"', { stdio: 'ignore' });
+    return true;
+  } catch {}
+
+  try {
+    execSync('reg query "HKLM\\Software\\Wine"', { stdio: 'ignore' });
+    return true;
+  } catch {}
+
+  return false;
+}
+
 async function Start() {
   try {
     programSettings = await settingsHelper.initializeSettings();
@@ -48,14 +98,23 @@ async function Start() {
 
     //#region Graphic Options
 
-    //- Rendering Backend: Vulkan / OpenGL / Direct3D:
-    const GpuRenderer = settingsHelper.readSetting('GpuRenderer', 'Vulkan');
-    switch (GpuRenderer) {
-      case 'Vulkan': app.commandLine.appendSwitch('use-vulkan'); break; // Force Vulkan
-      case 'OpenGL': app.commandLine.appendSwitch('use-angle', 'gl'); break; // Force ANGLE with OpenGL
-      case 'Direct3D': app.commandLine.appendSwitch('use-angle', 'd3d11'); break; // Force ANGLE with Direct3D 11
-      default:
-        app.commandLine.appendSwitch('use-vulkan'); break;
+    const isWineRuntime = isWindowsWineLikeRuntime();
+    if (isWineRuntime) {
+      console.log('Detected Wine/CrossOver runtime. Forcing SwiftShader WebGL fallback flags.');
+      app.commandLine.appendSwitch('use-angle', 'swiftshader');
+      app.commandLine.appendSwitch('enable-unsafe-swiftshader');
+      app.commandLine.appendSwitch('in-process-gpu');
+      app.commandLine.appendSwitch('no-sandbox');
+    } else {
+      //- Rendering Backend: Vulkan / OpenGL / Direct3D:
+      const GpuRenderer = settingsHelper.readSetting('GpuRenderer', 'Vulkan');
+      switch (GpuRenderer) {
+        case 'Vulkan': app.commandLine.appendSwitch('use-vulkan'); break; // Force Vulkan
+        case 'OpenGL': app.commandLine.appendSwitch('use-angle', 'gl'); break; // Force ANGLE with OpenGL
+        case 'Direct3D': app.commandLine.appendSwitch('use-angle', 'd3d11'); break; // Force ANGLE with Direct3D 11
+        default:
+          app.commandLine.appendSwitch('use-vulkan'); break;
+      }
     }
 
     // Desactiva solo la composición por GPU (no toda la aceleración)
@@ -64,7 +123,7 @@ async function Start() {
       app.commandLine.appendSwitch('disable-gpu-compositing');
     }
     const GpuAcceleration = settingsHelper.readSetting('GpuAcceleration', true);
-    if (!GpuAcceleration) {
+    if (!GpuAcceleration && !isWineRuntime) {
       app.commandLine.appendSwitch('disable-gpu');
     }
     //- Hardware-Accelerated Video Decoding
@@ -79,7 +138,7 @@ async function Start() {
     }
     //- Enable WebGL” / “Enable WebGL2
     const GpuUseWebGL = settingsHelper.readSetting('GpuUseWebGL', true);
-    if (!GpuUseWebGL) {
+    if (!GpuUseWebGL && !isWineRuntime) {
       app.commandLine.appendSwitch('disable-webgl');
       app.commandLine.appendSwitch('disable-webgl2');
     }
@@ -98,15 +157,18 @@ async function Start() {
     // initialization and is ready to create browser windows.
     // Some APIs can only be used after this event occurs.
     app.whenReady().then(async () => {
-      // Ajustar el Escalado de imagen a la pantalla:
+      // Ajustar el escalado de la UI:
       const { size, scaleFactor: systemScale } = screen.getPrimaryDisplay();
       let userScale = settingsHelper.readSetting('UiScaleFactor', 0); // 0 = automático
       let finalScale;
-      if (userScale && userScale > 0) {        
+      if (userScale && userScale > 0) {
         finalScale = userScale; //<- Usuario forzó un valor
-      } else {        
+      } else if (process.platform === 'darwin') {
+        // macOS/Retina already handles HiDPI correctly; using the raw system scale
+        // here makes the whole UI comically large.
+        finalScale = 1;
+      } else {
         finalScale = systemScale; //<- Automático: usa el del sistema
-        // Ejemplo de regla extra: si es 4K, mínimo 1.5
         if (size.width >= 3840) {
           finalScale = Math.max(finalScale, 1.5);
         }
@@ -188,10 +250,16 @@ async function Start() {
 }
 
 const createWindow = () => {
+  const savedWindowState = loadWindowState();
+  const windowWidth = Math.max(savedWindowState.width || 1600, 800);
+  const windowHeight = Math.max(savedWindowState.height || 800, 553);
+  const hasSavedPosition = Number.isFinite(savedWindowState.x) && Number.isFinite(savedWindowState.y);
+
   // Create the browser window.
   mainWindow = new BrowserWindow({ // Assign to the outer scope variable
-    width: 1600, minWidth: 800,
-    height: 800, minHeight: 553,
+    ...(hasSavedPosition ? { x: savedWindowState.x, y: savedWindowState.y } : {}),
+    width: windowWidth, minWidth: 800,
+    height: windowHeight, minHeight: 553,
 
     icon: CustomIcon, //path.join(__dirname, 'images/ED_TripleElite.ico'),
     backgroundColor: '#1F1F1F',
@@ -218,12 +286,18 @@ const createWindow = () => {
     mainWindow.webContents.openDevTools( { mode: 'detach'});
 
   } else {
-    console.log('Production mode: ');
-    mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
+    const productionEntry = path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`);
+    console.log('Production mode:', productionEntry);
+    mainWindow.loadFile(productionEntry);
   }
 
-  HideToTray = settingsHelper.readSetting('HideToTray', false); //<- Hide to System Tray on close
-  console.log('HideToTray:', HideToTray);
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error('Main window failed to load:', { errorCode, errorDescription, validatedURL });
+  });
+
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('Main window render process gone:', details);
+  });
 
   StartMinimizedToTray = settingsHelper.readSetting('StartMinimizedToTray', false);
   console.log('StartMinimizedToTray:', StartMinimizedToTray);
@@ -242,11 +316,26 @@ const createWindow = () => {
       wc.openDevTools({ mode: 'detach' })
     }
   });
+  mainWindow.on('resize', () => {
+    saveWindowState(mainWindow);
+  });
+  mainWindow.on('move', () => {
+    saveWindowState(mainWindow);
+  });
+
   mainWindow.once('ready-to-show', () => {
     if (StartMinimizedToTray && process.platform === 'win32') {
       mainWindow.hide(); // arranca minimizada en tray
     } else {
       mainWindow.show(); // arranca visible normalmente
+      mainWindow.focus();
+    }
+  });
+
+  mainWindow.webContents.once('did-finish-load', () => {
+    if (!(StartMinimizedToTray && process.platform === 'win32') && !mainWindow.isVisible()) {
+      mainWindow.show();
+      mainWindow.focus();
     }
   });
   // Handle external links
@@ -263,35 +352,18 @@ const createWindow = () => {
   });
   // Handle window close event
   mainWindow.on('close', (event) => {
-    if (HideToTray && process.platform === 'win32') {
-      event.preventDefault(); // Prevent the default close behavior
-      mainWindow.hide(); // Hide the window instead of closing it
-
-      //- Show a balloon notification informing the user that the app is still running in the background
-      //- This is only for Windows, as Linux have different tray behavior
-      if (tray && BalloonShown === false) {
-        const BallonOptions = {
-          title: 'EDHM-UI',
-          icon: path.join(__dirname, 'images/ED_TripleElite.ico'),
-          content: 'The App is still running in the background.'
-        };
-        tray.displayBalloon(BallonOptions);
-        BalloonShown = true; // Shows the Balloon only once per session
-      }
-    } else {
-      //- Here the Program Terminates Normally
-      console.log('Quiting..');
-      if (tray) {
-        tray.destroy(); // Destroy the tray icon
-      }
-      app.isQuiting = true; // Signal that the app is quitting
-      globalShortcut.unregisterAll(); // Clean up shortcuts on app quit
-      if (mainWindow) {
-        mainWindow.removeAllListeners('close');
-        mainWindow.close();
-      }
-      app.quit();
+    //- Here the Program Terminates Normally
+    console.log('Quiting..');
+    if (tray) {
+      tray.destroy(); // Destroy the tray icon
     }
+    app.isQuiting = true; // Signal that the app is quitting
+    globalShortcut.unregisterAll(); // Clean up shortcuts on app quit
+    if (mainWindow) {
+      mainWindow.removeAllListeners('close');
+      mainWindow.close();
+    }
+    app.quit();
   });
 };
 
@@ -403,6 +475,59 @@ ipcMain.handle('quit-program', async (event) => {
       mainWindow.removeAllListeners('close');
       app.quit();
     }
+    return true;
+  } catch (error) {
+    console.error(error);
+    throw error;
+  }
+});
+
+ipcMain.handle('restart-program', async () => {
+  try {
+    app.isQuiting = true;
+    globalShortcut.unregisterAll();
+    if (tray) {
+      tray.destroy();
+      tray = null;
+    }
+
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.removeAllListeners('close');
+    }
+
+    app.releaseSingleInstanceLock();
+
+    if (process.platform === 'darwin' && app.isPackaged) {
+      const appBundlePath = path.resolve(process.execPath, '..', '..', '..');
+      const relaunchScript = `sleep 1; open -n ${JSON.stringify(appBundlePath)}`;
+      const child = spawn('/bin/sh', ['-c', relaunchScript], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      child.unref();
+
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.close();
+        }
+      }
+      app.exit(0);
+      return true;
+    }
+
+    setImmediate(() => {
+      app.relaunch({
+        execPath: process.execPath,
+      });
+      app.exit(0);
+    });
+
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.close();
+      }
+    }
+
     return true;
   } catch (error) {
     console.error(error);

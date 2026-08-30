@@ -2,7 +2,8 @@
 <template>
   <div id="Container" class="image-container" ref="container" 
     @mousemove="OnArea_MouseMove" @mouseleave="OnArea_MouseLeave" @click="OnArea_Click($event)">
-    <img :src="imageSrc" alt="HUD Image" ref="image" class="hud-image" @load="setupCanvas" />
+    <img v-if="imageSrc" :src="imageSrc" alt="HUD Image" ref="image" class="hud-image" @load="setupCanvas" />
+    <div v-else class="hud-placeholder">Loading theme preview…</div>
     <canvas ref="canvas"></canvas>
   </div>
 </template>
@@ -69,6 +70,8 @@ export default {
       const image = this.$refs.image;
       const canvas = this.$refs.canvas;
       const container = this.$refs.container;
+
+      if (!image || !canvas || !container) return;
 
       if (image.complete) {
         this.originalWidth = image.naturalWidth;
@@ -250,14 +253,26 @@ export default {
         }
       }
     },
+
+    ShowThemePreview(preview) {
+      if (!preview?.src) return;
+
+      this.clickedArea = null;
+      this.currentArea = null;
+      this.areas = [];
+      this.scaledAreas = [];
+      this.imageSrc = preview.src;
+      this.$nextTick(() => this.setupCanvas());
+    },
+
   },
   async mounted() {
     try {
-      this.imageSrc = await window.api.getAssetFileUrl('images/HUD_Clean.png');         //console.log(this.imageSrc);
       window.addEventListener('resize', this.setupCanvas);
 
       EventBus.on('InitializeHUDimage', this.OnInitialize);
       EventBus.on('LoadArea', this.DoLoadArea);
+      EventBus.on('ShowThemePreview', this.ShowThemePreview);
     } catch (error) {
       console.log(error);
     }    
@@ -267,6 +282,7 @@ export default {
 
     EventBus.off('InitializeHUDimage', this.OnInitialize);
     EventBus.off('LoadArea', this.DoLoadArea);
+    EventBus.off('ShowThemePreview', this.ShowThemePreview);
   },
 };
 </script>
@@ -284,6 +300,16 @@ body {
   width: 100%;
   height: 100%;
   object-fit: contain;  
+}
+.hud-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8f98a3;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
 }
 
 .navbar-thin {
