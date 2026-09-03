@@ -176,8 +176,37 @@ async function Start() {
 
       createWindow();
 
-      //-- Disable the menu bar
-      Menu.setApplicationMenu(null);
+      // Use the native macOS application menu. The renderer keeps its
+      // cross-platform menu, while macOS users also get the standard
+      // Settings… command in the application menu (⌘,).
+      if (process.platform === 'darwin') {
+        const applicationMenu = Menu.buildFromTemplate([
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' },
+              { type: 'separator' },
+              {
+                role: 'preferences',
+                accelerator: 'Command+,',
+                click: () => mainWindow?.webContents.send('menu:settings')
+              },
+              { type: 'separator' },
+              { role: 'services' },
+              { type: 'separator' },
+              { role: 'hide' },
+              { role: 'hideOthers' },
+              { role: 'unhide' },
+              { type: 'separator' },
+              { role: 'quit' }
+            ]
+          },
+          { role: 'editMenu' },
+          { role: 'windowMenu' },
+          { role: 'help' }
+        ]);
+        Menu.setApplicationMenu(applicationMenu);
+      }
 
 
       //-- Create Desktop Shortcut Icons:

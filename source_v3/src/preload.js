@@ -51,6 +51,8 @@ contextBridge.exposeInMainWorld('api', {
   detectProgram: (exeName) => ipcRenderer.invoke('detect-program', exeName),
   startMonitoring: (exeName) => ipcRenderer.invoke('start-monitoring', exeName),
   onProgramDetected: (callback) => ipcRenderer.on('program-detected', callback),
+  onMenuSettings: (callback) => ipcRenderer.on('menu:settings', callback),
+  removeMenuSettingsListener: (callback) => ipcRenderer.removeListener('menu:settings', callback),
   terminateProgram: (exeName) => ipcRenderer.invoke('terminate-program', exeName),
 
   openPathInExplorer: (filePath) => ipcRenderer.invoke('openPathInExplorer', filePath),

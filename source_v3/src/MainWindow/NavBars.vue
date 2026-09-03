@@ -18,8 +18,8 @@
               <option value="mnuShipyard">Shipyard</option>
               <option value="mnu3PModsManager">3PMods (Plugins)</option>
               <option value="" disabled>──────────</option>
-              <option value="mnuInstallMod">Install EDHM</option>
-              <option value="mnuUninstallMod">Un-install EDHM</option>
+              <option v-if="showInstallMenuOption" value="mnuInstallMod">Install EDHM</option>
+              <option v-if="showUninstallMenuOption" value="mnuUninstallMod">Un-install EDHM</option>
               <option value="mnuDisableMod">{{ edhmToggleMenuLabel }}</option>
               <option value="" disabled>──────────</option>
               <option value="mnuGoToDiscord">Help? Join our Discord</option>
@@ -268,6 +268,7 @@ export default {
       startTime: 0,
       totalDownloadedBytes: 0,
       progressListener: null,
+      nativeSettingsMenuListener: null,
 
       DATA_DIRECTORY: '',
     };
@@ -290,6 +291,12 @@ export default {
       if (this.edhmInstalled === true) return 'Disable EDHM';
       if (this.edhmInstalled === false) return 'Enable EDHM';
       return 'Enable/Disable EDHM';
+    },
+    showInstallMenuOption() {
+      return this.edhmStatus === null || this.edhmStatus?.state === 'not_installed';
+    },
+    showUninstallMenuOption() {
+      return this.edhmStatus === null || ['ready', 'disabled'].includes(this.edhmStatus?.state);
     }
   },
   methods: {
@@ -1092,6 +1099,8 @@ export default {
     EventBus.on('StartDownload', this.DownloadAndInstallUpdate);
     EventBus.on('OnGlobalSettingsLoaded', this.OnGlobalSettingsLoaded);
     EventBus.on('OnXmlChanged', this.OnXmlChanged);
+    this.nativeSettingsMenuListener = () => this.MainMenu_Click('mnuSettings');
+    window.api.onMenuSettings(this.nativeSettingsMenuListener);
 
     if (typeof this.progressListener === 'function') {
       window.api.removeDownloadProgressListener(this.progressListener);
@@ -1115,6 +1124,10 @@ export default {
     EventBus.off('StartDownload', this.DownloadAndInstallUpdate);
     EventBus.off('OnGlobalSettingsLoaded', this.OnGlobalSettingsLoaded);
     EventBus.off('ApplyGivenTheme', this.ApplyGivenTheme);
+    if (this.nativeSettingsMenuListener) {
+      window.api.removeMenuSettingsListener(this.nativeSettingsMenuListener);
+      this.nativeSettingsMenuListener = null;
+    }
 
     if (typeof this.progressListener === 'function') {
       window.api.removeDownloadProgressListener(this.progressListener);
