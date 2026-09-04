@@ -254,8 +254,8 @@ export default {
           EventBus.emit('RoastMe', { type: 'Info', message: Backup });
           if (edhmInstalled.crossOverDllOverrides && !edhmInstalled.crossOverDllOverrides.skipped) {
             const message = edhmInstalled.crossOverDllOverrides.changed
-              ? 'CrossOver DLL overrides set for EDHM. Restart Elite/CrossOver if Elite was already running.'
-              : 'CrossOver DLL overrides already set for EDHM.';
+              ? 'Wine DLL overrides set for EDHM. Restart Elite/CrossOver if Elite was already running.'
+              : 'Wine DLL overrides already set for EDHM.';
             EventBus.emit('RoastMe', { type: 'Success', message });
           } else if (edhmInstalled.crossOverDllOverrides?.skipped) {
             EventBus.emit('RoastMe', { type: 'Info', message: edhmInstalled.crossOverDllOverrides.reason });

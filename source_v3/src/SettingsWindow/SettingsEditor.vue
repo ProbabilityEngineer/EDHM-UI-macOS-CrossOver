@@ -64,12 +64,7 @@
 
                 <hr />
 
-                <!-- Other Settings as Card -->
-                <div class="card text-light mb-3">
-                    <div class="card-header">
-                        <h5 class="mb-0">Other Settings</h5>
-                    </div>
-                    <div class="card-body">
+                <!-- Additional paths and compatibility settings -->
                         <div class="row">
                             <div class="col-12">
                                 <label for="playerJournal">Player's Journal Location:</label>
@@ -87,7 +82,7 @@
 
                         <div class="row">
                             <div class="col-12">
-                                <label for="crossOverBottlePath">CrossOver Bottle Root:</label>
+                                <label for="crossOverBottlePath">Wine Prefix / CrossOver Bottle Root:</label>
                                 <div id="crossOverBottlePath" class="input-group mb-2">
                                     <input type="text" class="form-control form-control-sm"
                                         placeholder="Pick the CrossOver bottle folder that contains drive_c" aria-label="Pick a Location"
@@ -99,7 +94,7 @@
                                 </div>
                                 <div class="mb-3">
                                     <button class="btn btn-outline-info btn-sm" type="button" @click="runCrossOverDllOverrides">
-                                        Set EDHM DLL Overrides
+                                        Configure Wine DLL Overrides
                                     </button>
                                 </div>
                             </div>
@@ -127,9 +122,6 @@
                                     inputmode="numeric" style="max-width: 5rem;" v-model="config.SavesToRemember" />
                             </div>
                         </div>
-
-                    </div>
-                </div>
 
                 <!-- Footer buttons -->
                 <div class="mt-4">
@@ -461,10 +453,10 @@ export default {
         async browseBottleFolder() {
             const defaultLocation = this.config.CrossOverBottlePath || await window.api.resolveEnvVariables('%USERPROFILE%');
             const options = {
-                title: 'Select CrossOver Bottle Root',
+                title: 'Select Wine Prefix / CrossOver Bottle Root',
                 defaultPath: defaultLocation,
                 properties: ['openDirectory', 'createDirectory', 'promptToCreate', 'dontAddToRecent'],
-                message: 'Select the CrossOver bottle folder that contains drive_c',
+                message: 'Select the Wine prefix or CrossOver bottle folder that contains drive_c',
                 filters: null
             };
             const filePath = await window.api.ShowOpenDialog(options);
@@ -478,7 +470,7 @@ export default {
                     await window.api.ShowMessageBox({
                         type: 'warning',
                         buttons: ['OK'],
-                        title: 'CrossOver Bottle Root Required',
+                        title: 'Wine Prefix Required',
                         message: 'Select a CrossOver Bottle Root first.',
                         detail: 'The CrossOver bottle root is the folder that contains drive_c and user.reg.'
                     });
@@ -489,11 +481,11 @@ export default {
                 await window.api.ShowMessageBox({
                     type: result.changed ? 'info' : 'none',
                     buttons: ['OK'],
-                    title: 'EDHM DLL Overrides',
-                    message: result.changed ? 'CrossOver DLL overrides were updated.' : 'CrossOver DLL overrides are already set.',
+                    title: 'Wine DLL Overrides',
+                    message: result.changed ? 'Wine DLL overrides were updated.' : 'Wine DLL overrides are already set.',
                     detail: result.changed
                         ? `Updated ${result.userRegPath}\nBackup: ${result.backupPath}\n\nRestart CrossOver/Elite if it was already running.`
-                        : `CrossOver bottle: ${result.bottleRoot}\n\nd3d11 and d3dcompiler_47 are set to native,builtin.`
+                        : `Wine prefix / CrossOver bottle: ${result.bottleRoot}\n\nd3d11 and d3dcompiler_47 are set to native,builtin.`
                 });
             } catch (error) {
                 console.log(error);
@@ -573,8 +565,8 @@ export default {
                     defaultId: 1,
                     cancelId: 0,
                     title: 'CrossOver Bottle Detected',
-                    message: 'Set the EDHM CrossOver DLL overrides for this bottle?',
-                    detail: 'EDHM needs d3d11 and d3dcompiler_47 set to native,builtin in CrossOver. You can also run this later from the CrossOver Bottle Root row.'
+                    message: 'Configure Wine DLL overrides for this prefix?',
+                    detail: 'EDHM needs d3d11 and d3dcompiler_47 set to native,builtin. You can also run this later from the Wine Prefix / CrossOver Bottle Root row.'
                 });
                 if (overrideResult.response === 1) {
                     await this.runCrossOverDllOverrides();
