@@ -50,6 +50,28 @@
                     </div>
                 </div>
 
+                <!-- Wine prefix / CrossOver bottle -->
+                <div class="row">
+                    <div class="col-12">
+                        <label for="crossOverBottlePath">Wine Prefix / CrossOver Bottle Root:</label>
+                        <div id="crossOverBottlePath" class="input-group mb-2">
+                            <input type="text" class="form-control form-control-sm"
+                                placeholder="Pick the CrossOver bottle folder that contains drive_c" aria-label="Pick a Location"
+                                aria-describedby="button-addon-bottle" v-model="config.CrossOverBottlePath" />
+                            <button class="btn btn-outline-secondary" type="button" id="button-addon-bottle"
+                                @click="browseBottleFolder">
+                                Browse
+                            </button>
+                        </div>
+                        <div class="mb-3">
+                            <button class="btn btn-outline-info btn-sm" type="button" @click="runCrossOverDllOverrides">
+                                Repair Wine DLL Overrides
+                            </button>
+                            <span class="ms-2 text-muted small">{{ dllOverrideStatus }}</span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Game Path Box -->
                 <label for="txtFullGamePath" class="form-label">Full path to the Game's Executable:</label>
                 <div class="input-group mb-3">
@@ -62,66 +84,44 @@
                     </button>
                 </div>
 
-                <hr />
-
                 <!-- Additional paths and compatibility settings -->
-                        <div class="row">
-                            <div class="col-12">
-                                <label for="playerJournal">Player's Journal Location:</label>
-                                <div id="playerJournal" class="input-group mb-3">
-                                    <input type="text" class="form-control form-control-sm"
-                                        placeholder="Pick a Location" aria-label="Pick a Location"
-                                        aria-describedby="button-addon2" v-model="config.PlayerJournal" />
-                                    <button class="btn btn-outline-secondary" type="button" id="button-addon2"
-                                        @click="browseJournalFolder">
-                                        Browse
-                                    </button>
-                                </div>
-                            </div>
+                <div class="row">
+                    <div class="col-12">
+                        <label for="playerJournal">Player's Journal Location:</label>
+                        <div id="playerJournal" class="input-group mb-3">
+                            <input type="text" class="form-control form-control-sm"
+                                placeholder="Pick a Location" aria-label="Pick a Location"
+                                aria-describedby="button-addon2" v-model="config.PlayerJournal" />
+                            <button class="btn btn-outline-secondary" type="button" id="button-addon2"
+                                @click="browseJournalFolder">
+                                Browse
+                            </button>
                         </div>
+                    </div>
+                </div>
 
-                        <div class="row">
-                            <div class="col-12">
-                                <label for="crossOverBottlePath">Wine Prefix / CrossOver Bottle Root:</label>
-                                <div id="crossOverBottlePath" class="input-group mb-2">
-                                    <input type="text" class="form-control form-control-sm"
-                                        placeholder="Pick the CrossOver bottle folder that contains drive_c" aria-label="Pick a Location"
-                                        aria-describedby="button-addon-bottle" v-model="config.CrossOverBottlePath" />
-                                    <button class="btn btn-outline-secondary" type="button" id="button-addon-bottle"
-                                        @click="browseBottleFolder">
-                                        Browse
-                                    </button>
-                                </div>
-                                <div class="mb-3">
-                                    <button class="btn btn-outline-info btn-sm" type="button" @click="runCrossOverDllOverrides">
-                                        Configure Wine DLL Overrides
-                                    </button>
-                                </div>
-                            </div>
+                <div class="row">
+                    <div class="col-12">
+                        <label for="playerConfigFolder">Graphics Config XML Folder:</label>
+                        <div id="playerConfigFolder" class="input-group mb-3">
+                            <input type="text" class="form-control form-control-sm"
+                                placeholder="Pick the folder containing GraphicsConfiguration*.xml" aria-label="Pick a Location"
+                                aria-describedby="button-addon-config" v-model="config.PlayerConfigFolder" />
+                            <button class="btn btn-outline-secondary" type="button" id="button-addon-config"
+                                @click="browseConfigFolder">
+                                Browse
+                            </button>
                         </div>
+                    </div>
+                </div>
 
-                        <div class="row">
-                            <div class="col-12">
-                                <label for="playerConfigFolder">Graphics Config XML Folder:</label>
-                                <div id="playerConfigFolder" class="input-group mb-3">
-                                    <input type="text" class="form-control form-control-sm"
-                                        placeholder="Pick the folder containing GraphicsConfiguration*.xml" aria-label="Pick a Location"
-                                        aria-describedby="button-addon-config" v-model="config.PlayerConfigFolder" />
-                                    <button class="btn btn-outline-secondary" type="button" id="button-addon-config"
-                                        @click="browseConfigFolder">
-                                        Browse
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-auto">
-                                <label for="quantity">Number of Themes to Save:</label>
-                                <input type="number" class="form-control form-control-sm" id="quantity" min="1" max="999" step="1"
-                                    inputmode="numeric" style="max-width: 5rem;" v-model="config.SavesToRemember" />
-                            </div>
-                        </div>
+                <div class="row">
+                    <div class="col-auto">
+                        <label for="quantity">Number of Themes to Save:</label>
+                        <input type="number" class="form-control form-control-sm" id="quantity" min="1" max="999" step="1"
+                            inputmode="numeric" style="max-width: 5rem;" v-model="config.SavesToRemember" />
+                    </div>
+                </div>
 
                 <!-- Footer buttons -->
                 <div class="mt-4">
@@ -224,6 +224,7 @@ export default {
             selectedPublisher: 0,
             selectedVersion: 0,
             selectedGamePath: '',
+            dllOverrideStatus: 'Not checked',
             publishers: [],
             versions: [],
             DATA_DIRECTORY: '',
@@ -478,6 +479,9 @@ export default {
                 }
 
                 const result = await window.api.setCrossOverDllOverrides(this.config.CrossOverBottlePath);
+                this.dllOverrideStatus = result.skipped
+                    ? 'Unavailable'
+                    : (result.changed ? 'Repaired' : 'Configured');
                 await window.api.ShowMessageBox({
                     type: result.changed ? 'info' : 'none',
                     buttons: ['OK'],
@@ -488,6 +492,7 @@ export default {
                         : `Wine prefix / CrossOver bottle: ${result.bottleRoot}\n\nd3d11 and d3dcompiler_47 are set to native,builtin.`
                 });
             } catch (error) {
+                this.dllOverrideStatus = 'Error';
                 console.log(error);
             }
         },
