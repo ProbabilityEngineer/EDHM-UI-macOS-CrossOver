@@ -575,6 +575,7 @@ ipcMain.on('settings:open', (event, initData) => {
       height: 750,
       icon: CustomIcon, //path.join(__dirname, 'images/ED_TripleElite.ico'),
       backgroundColor: '#1F1F1F',
+      show: false,
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
         contextIsolation: true,
@@ -595,8 +596,25 @@ ipcMain.on('settings:open', (event, initData) => {
     }
 
 
-    win.webContents.once('did-finish-load', () => {
+    win.webContents.once('did-finish-load', async () => {
       win.webContents.send('settings:init-data', initData)
+
+      // Wait for Vue to render the settings form, then size the window to the
+      // actual content so the default General Settings tab does not start with
+      // a nearly-unnecessary scrollbar.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      try {
+        const contentHeight = await win.webContents.executeJavaScript(`
+          Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)
+        `);
+        const display = screen.getDisplayMatching(win.getBounds());
+        const maxHeight = Math.max(600, display.workAreaSize.height - 80);
+        const settingsHeight = Math.min(Math.ceil(contentHeight) + 16, maxHeight);
+        win.setContentSize(800, settingsHeight);
+      } catch (error) {
+        console.warn('Unable to fit Settings window to content:', error.message);
+      }
+      win.show();
     })
     win.on('closed', () => {
       event.sender.send('settings:closed', { ok: true })
