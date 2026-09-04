@@ -87,10 +87,10 @@
 
                         <div class="row">
                             <div class="col-12">
-                                <label for="crossOverBottlePath">Bottle Root:</label>
+                                <label for="crossOverBottlePath">CrossOver Bottle Root:</label>
                                 <div id="crossOverBottlePath" class="input-group mb-2">
                                     <input type="text" class="form-control form-control-sm"
-                                        placeholder="Pick the bottle folder that contains drive_c" aria-label="Pick a Location"
+                                        placeholder="Pick the CrossOver bottle folder that contains drive_c" aria-label="Pick a Location"
                                         aria-describedby="button-addon-bottle" v-model="config.CrossOverBottlePath" />
                                     <button class="btn btn-outline-secondary" type="button" id="button-addon-bottle"
                                         @click="browseBottleFolder">
@@ -478,9 +478,9 @@ export default {
                     await window.api.ShowMessageBox({
                         type: 'warning',
                         buttons: ['OK'],
-                        title: 'Bottle Root Required',
+                        title: 'CrossOver Bottle Root Required',
                         message: 'Select a CrossOver Bottle Root first.',
-                        detail: 'The bottle root is the folder that contains drive_c and user.reg.'
+                        detail: 'The CrossOver bottle root is the folder that contains drive_c and user.reg.'
                     });
                     return;
                 }
@@ -493,7 +493,7 @@ export default {
                     message: result.changed ? 'CrossOver DLL overrides were updated.' : 'CrossOver DLL overrides are already set.',
                     detail: result.changed
                         ? `Updated ${result.userRegPath}\nBackup: ${result.backupPath}\n\nRestart CrossOver/Elite if it was already running.`
-                        : `Bottle: ${result.bottleRoot}\n\nd3d11 and d3dcompiler_47 are set to native,builtin.`
+                        : `CrossOver bottle: ${result.bottleRoot}\n\nd3d11 and d3dcompiler_47 are set to native,builtin.`
                 });
             } catch (error) {
                 console.log(error);
@@ -574,7 +574,7 @@ export default {
                     cancelId: 0,
                     title: 'CrossOver Bottle Detected',
                     message: 'Set the EDHM CrossOver DLL overrides for this bottle?',
-                    detail: 'EDHM needs d3d11 and d3dcompiler_47 set to native,builtin in CrossOver. You can also run this later from the Bottle Root row.'
+                    detail: 'EDHM needs d3d11 and d3dcompiler_47 set to native,builtin in CrossOver. You can also run this later from the CrossOver Bottle Root row.'
                 });
                 if (overrideResult.response === 1) {
                     await this.runCrossOverDllOverrides();

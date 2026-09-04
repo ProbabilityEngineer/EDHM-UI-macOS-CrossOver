@@ -432,7 +432,7 @@ const createTray = () => {
     ]);
 
     tray.setContextMenu(contextMenu);
-    tray.setToolTip('EDHM-UI');
+    tray.setToolTip('EDHM-UI-Mac');
 
     // Add the double-click event listener
     tray.on('double-click', () => {
