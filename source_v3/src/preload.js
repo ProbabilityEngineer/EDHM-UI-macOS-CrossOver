@@ -200,6 +200,7 @@ contextBridge.exposeInMainWorld('api', {
 
   getLatestPreReleaseVersion: async (owner, repo) => ipcRenderer.invoke('getLatestPreReleaseVersion', owner, repo),
   getLatestReleaseVersion: async (owner, repo) => ipcRenderer.invoke('getLatestReleaseVersion', owner, repo),
+  getLatestEDHMVersion: async () => ipcRenderer.invoke('getLatestEDHMVersion'),
 
   copyToClipboard: (text) => ipcRenderer.invoke('copyToClipboard', text),
   openFile: async (filePath) => ipcRenderer.invoke('openFile', filePath),

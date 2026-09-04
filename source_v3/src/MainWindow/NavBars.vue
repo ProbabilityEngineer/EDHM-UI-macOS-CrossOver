@@ -25,7 +25,7 @@
               <option value="mnuGoToDiscord">Help? Join our Discord</option>
               <option value="mnuReadManual">Read the Manual</option>
               <option value="" disabled>──────────</option>
-              <option value="mnuCheckUpdates">Check for Updates</option>              
+              <option value="mnuCheckUpdates">Check for EDHM Updates</option>              
               <option value="mnuExit">Exit App</option>
             </select>
           </div>

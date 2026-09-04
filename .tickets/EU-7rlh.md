@@ -27,3 +27,7 @@ On macOS, the app menu bar contains a standard Settings… command that opens/fo
 **2026-09-03T23:53:55Z**
 
 Implemented macOS-only native Electron application menu with standard app/edit/window/help roles and Settings… (Command+,) command routed to the existing renderer settings flow. Added preload listener lifecycle and preserved existing in-app menu/platform behavior. npm run package passed; Vue LSP unavailable, JS diagnostics clean.
+
+**2026-09-04T00:10:34Z**
+
+Follow-up fixes restored explicit Settings… label and File/View/Help native menus, and moved update checking to EDHM mod payload versions. Tracked separately under new ticket.

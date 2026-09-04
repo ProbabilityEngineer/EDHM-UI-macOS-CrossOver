@@ -712,16 +712,29 @@ export default {
         }
     },
     async LookForUpdates() {
-      window.api.getLatestReleaseVersion('BlueMystical', 'EDHM_UI').then(latestRelease => {   //<- For PROD Release
-      //window.api.getLatestPreReleaseVersion('BlueMystical', 'EDHM_UI').then(latestRelease => {   //<- For Beta Testing
-        if (latestRelease) {
-          console.log(latestRelease);
-          this.AnalyseUpdate(latestRelease);
-        } else {
-          console.log('No pre-release version found.');
+      window.api.getLatestEDHMVersion().then(latestEdhm => {
+        if (!latestEdhm) {
+          console.log('No EDHM version found.');
+          return;
+        }
+
+        const localEdhmVersion = this.settings.Version_ODYSS || this.settings.Version_HORIZ || '';
+        const isUpdate = !localEdhmVersion ||
+          Util.compareVersions(latestEdhm.version, localEdhmVersion);
+
+        console.log('Latest EDHM:', latestEdhm.version, 'Local EDHM:', localEdhmVersion);
+        if (isUpdate) {
+          EventBus.emit('RoastMe', {
+            type: 'Info',
+            title: 'EDHM Update Available',
+            message: `EDHM ${latestEdhm.version} is available (installed: ${localEdhmVersion || 'unknown'}).`,
+            detail: 'Install the latest EDHM payload through an updated EDHM-UI package.',
+            autoHide: false,
+            width: '440px'
+          });
         }
       }).catch(error => {
-        console.error('Error fetching pre-release version:', error);
+        console.error('Error fetching latest EDHM version:', error);
         EventBus.emit('ShowError', error);
       });
     },    

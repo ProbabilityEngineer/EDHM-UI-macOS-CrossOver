@@ -187,6 +187,7 @@ async function Start() {
               { role: 'about' },
               { type: 'separator' },
               {
+                label: 'Settings…',
                 role: 'preferences',
                 accelerator: 'Command+,',
                 click: () => mainWindow?.webContents.send('menu:settings')
@@ -201,9 +202,11 @@ async function Start() {
               { role: 'quit' }
             ]
           },
-          { role: 'editMenu' },
-          { role: 'windowMenu' },
-          { role: 'help' }
+          { label: 'File', role: 'fileMenu' },
+          { label: 'Edit', role: 'editMenu' },
+          { label: 'View', role: 'viewMenu' },
+          { label: 'Window', role: 'windowMenu' },
+          { label: 'Help', role: 'help' }
         ]);
         Menu.setApplicationMenu(applicationMenu);
       }

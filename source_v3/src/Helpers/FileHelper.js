@@ -1599,6 +1599,51 @@ async function getLatestReleaseVersion(owner, repo) {
   });
 }
 
+/** Find the current EDHM mod payload in the EDHM repository.
+ * EDHM publishes its version in the Odyssey archive filename rather than
+ * as a GitHub release, so the EDHM-UI application release API is not suitable.
+ */
+async function getLatestEDHMVersion() {
+  const options = {
+    hostname: 'api.github.com',
+    path: '/repos/psychicEgg/EDHM/contents/Odyssey',
+    method: 'GET',
+    headers: { 'User-Agent': 'EDHM-UI' }
+  };
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          if (res.statusCode !== 200) {
+            throw new Error(`EDHM version request failed: ${res.statusCode}`);
+          }
+          const entries = JSON.parse(data);
+          const candidates = entries
+            .map(entry => {
+              const match = entry.name?.match(/^EDHM_Odyssey_(v\\d+\\.\\d+)\\.zip$/i);
+              return match ? { version: match[1], name: entry.name, url: entry.download_url } : null;
+            })
+            .filter(Boolean);
+
+          candidates.sort((a, b) => {
+            const [aMajor, aMinor] = a.version.slice(1).split('.').map(Number);
+            const [bMajor, bMinor] = b.version.slice(1).split('.').map(Number);
+            return bMajor - aMajor || bMinor - aMinor;
+          });
+          resolve(candidates[0] || null);
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 /** Download a single file from a URL.
  * @param {*} url full URL to the resource
  * @param {*} destination Full path to save the downloaded file, including file-name and extension.
@@ -2094,6 +2139,15 @@ ipcMain.handle('getLatestPreReleaseVersion', async (event, owner, repo) => {
     throw new Error(error.message + error.stack);
   }
 });
+ipcMain.handle('getLatestEDHMVersion', async () => {
+  try {
+    return await getLatestEDHMVersion();
+  } catch (error) {
+    console.error('Error fetching latest EDHM version:', error);
+    throw new Error(error.message + error.stack);
+  }
+});
+
 ipcMain.handle('getLatestReleaseVersion', async (event, owner, repo) => {
   try {
     const latestRelease = await getLatestReleaseVersion(owner, repo);
