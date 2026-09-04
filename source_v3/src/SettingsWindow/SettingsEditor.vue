@@ -76,7 +76,7 @@
                 <label for="txtFullGamePath" class="form-label">Full path to the Game's Executable:</label>
                 <div class="input-group mb-3">
                     <input type="text" class="form-control form-control-sm"
-                        placeholder="Manually select the game location or use the Localization Wizard below"
+                        placeholder="Manually select the game location or use the Game Location Wizard below"
                         aria-label="Pick a location for " id="txtFullGamePath" v-model="selectedGamePath"
                         @change="OnGamePathChange" @input="OnGamePathChange" />
                     <button class="btn btn-outline-secondary" type="button" @click="browseGamePath()">
@@ -130,7 +130,7 @@
                             Reset
                         </button>
                         <button type="button" class="btn btn-success" @click="runGameLocationAssistant">
-                            Game Localization Wizard
+                            Game Location Wizard
                         </button>
                         <button type="button" class="btn btn-primary" @click="save">
                             Save Changes
@@ -529,7 +529,7 @@ export default {
                 buttons: ['Cancel', 'Continue'],
                 defaultId: 1,
                 cancelId: 0,
-                title: 'Game Localization Wizard',
+                title: 'Game Location Wizard',
                 message: 'This button detects the EliteDangerous64.exe location from a running Elite process.',
                 detail: 'Before continuing, launch Elite Dangerous and leave it sitting at the main menu. The wizard will read the running game path and may need to close Elite before later file changes are applied.'
             });
