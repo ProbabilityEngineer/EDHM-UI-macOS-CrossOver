@@ -605,11 +605,12 @@ ipcMain.on('settings:open', (event, initData) => {
       await new Promise(resolve => setTimeout(resolve, 50));
       try {
         const contentHeight = await win.webContents.executeJavaScript(`
-          Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)
+          Math.ceil(document.querySelector('#app')?.getBoundingClientRect().bottom ||
+            Math.max(document.body.scrollHeight, document.documentElement.scrollHeight))
         `);
         const display = screen.getDisplayMatching(win.getBounds());
         const maxHeight = Math.max(600, display.workAreaSize.height - 80);
-        const settingsHeight = Math.min(Math.ceil(contentHeight) + 16, maxHeight);
+        const settingsHeight = Math.min(contentHeight, maxHeight);
         win.setContentSize(800, settingsHeight);
       } catch (error) {
         console.warn('Unable to fit Settings window to content:', error.message);

@@ -1,6 +1,6 @@
 ---
 id: EU-jdgc
-status: in_progress
+status: closed
 deps: []
 links: []
 created: 2026-09-04T00:14:38Z
